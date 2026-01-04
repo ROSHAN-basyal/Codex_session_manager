@@ -1,5 +1,6 @@
 build/
-dist/
+dist/*
+!dist/*.exe
 *.spec
 __pycache__/
 .codex_session_manager/

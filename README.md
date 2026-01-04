@@ -4,6 +4,14 @@ This GUI reads Codex session logs from your local machine and helps you search, 
 
 ## Run
 
+Use the built executable (recommended on Windows):
+
+```
+dist/session_manager.exe
+```
+
+Or run from source:
+
 ```powershell
 python codex_session_manager.py
 ```
@@ -25,4 +33,20 @@ python codex_session_manager.py --sessions-dir "C:\Users\Asus\.codex\sessions"
 - Open the original working directory
 - Open the session log file
 - Edit titles (stored in `C:\Users\Asus\.codex\sessions\session mananger\titles\session_titles.json` by default)
+- Sort by Title, Created, or Updated via the column headers
 - App config is stored at `C:\Users\Asus\.codex_session_manager\config.json`
+
+## Setup notes
+
+- On first run, the app opens a folder picker (like an installer). Select `.codex` or any subfolder inside it.
+- The app resolves the correct `...\.codex\sessions` directory and creates `session mananger/titles/session_titles.json`.
+- The app also creates `session mananger/settings.json` in the same place.
+- The chosen location is saved in `C:\Users\Asus\.codex_session_manager\config.json`.
+
+## GUI overview
+
+- Top bar: search field with inline clear, plus Search and Refresh buttons.
+- Center: sortable session table (Title, Created, Updated, CWD, Session ID).
+- Right panel: title editor, session details, CLI dropdown, and action buttons.
+
+See `GUIDE.md` for more details.

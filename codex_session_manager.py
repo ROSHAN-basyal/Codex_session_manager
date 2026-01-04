@@ -34,6 +34,7 @@ class SessionEntry:
     updated_display: str
     short_id: str
     search_blob: str
+    is_default_title: bool
 
 
 def parse_iso(value):
@@ -481,6 +482,14 @@ def open_terminal(shell_cmd):
     subprocess.Popen(shell_cmd)
 
 
+def apply_untitled_numbers(sessions):
+    untitled = [s for s in sessions if s.is_default_title]
+    untitled.sort(key=lambda s: parse_iso(s.created_at) or datetime.min)
+    for idx, session in enumerate(untitled, start=1):
+        session.title = f"{DEFAULT_TITLE}_{idx}"
+        session.search_blob = f"{session.title} {session.cwd} {session.session_id} {session.path}".lower()
+
+
 def load_sessions(root_dir, title_overrides):
     sessions = []
     for path in iter_session_files(root_dir):
@@ -489,7 +498,13 @@ def load_sessions(root_dir, title_overrides):
         created_at = meta.get("timestamp") or iso_from_mtime(path)
         updated_at = find_last_timestamp(path)
         cwd = meta.get("cwd") or ""
-        title = title_overrides.get(session_id) or generate_title(path, session_id)
+        override = title_overrides.get(session_id)
+        if override is not None:
+            title = override
+            is_default_title = False
+        else:
+            title = generate_title(path, session_id)
+            is_default_title = title == DEFAULT_TITLE
         created_display = format_local(created_at)
         updated_display = format_local(updated_at)
         short_id = session_id[:8] if session_id else "unknown"
@@ -506,8 +521,10 @@ def load_sessions(root_dir, title_overrides):
                 updated_display=updated_display,
                 short_id=short_id,
                 search_blob=search_blob,
+                is_default_title=is_default_title,
             )
         )
+    apply_untitled_numbers(sessions)
     sessions.sort(key=lambda s: parse_iso(s.created_at) or datetime.min, reverse=True)
     return sessions
 
@@ -531,6 +548,16 @@ class SessionApp:
         self.cli_options = []
         self.status_var = tk.StringVar(value="")
         self.cli_combo = None
+        self.sort_column = "created"
+        self.sort_desc = True
+        self.column_labels = {
+            "title": "Title",
+            "created": "Created",
+            "updated": "Updated",
+            "cwd": "CWD",
+            "id": "Session ID",
+        }
+        self.sortable_columns = {"title", "created", "updated"}
 
         self.root.title("Codex Sessions")
         self.root.geometry("1100x680")
@@ -564,11 +591,7 @@ class SessionApp:
 
         columns = ("title", "created", "updated", "cwd", "id")
         self.tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
-        self.tree.heading("title", text="Title")
-        self.tree.heading("created", text="Created")
-        self.tree.heading("updated", text="Updated")
-        self.tree.heading("cwd", text="CWD")
-        self.tree.heading("id", text="Session ID")
+        self.update_sort_headings()
         self.tree.column("title", width=350)
         self.tree.column("created", width=120)
         self.tree.column("updated", width=120)
@@ -667,7 +690,7 @@ class SessionApp:
         query = self.search_var.get().strip()
         self.tree.delete(*self.tree.get_children())
         shown = 0
-        for session in self.sessions:
+        for session in self.get_sorted_sessions():
             if query and not matches_query(session.search_blob, query):
                 continue
             tag = "odd" if shown % 2 else "even"
@@ -694,6 +717,36 @@ class SessionApp:
             self.status_var.set(f"Showing {shown} of {total} sessions for filter: {query}")
         else:
             self.status_var.set(f"Showing {shown} sessions")
+
+    def get_sorted_sessions(self):
+        key_map = {
+            "title": lambda s: s.title.lower(),
+            "created": lambda s: parse_iso(s.created_at) or datetime.min,
+            "updated": lambda s: parse_iso(s.updated_at) or datetime.min,
+        }
+        key_func = key_map.get(self.sort_column, lambda s: s.title.lower())
+        return sorted(self.sessions, key=key_func, reverse=self.sort_desc)
+
+    def sort_by(self, column):
+        if column not in self.sortable_columns:
+            return
+        if self.sort_column == column:
+            self.sort_desc = not self.sort_desc
+        else:
+            self.sort_column = column
+            self.sort_desc = column in ("created", "updated")
+        self.update_sort_headings()
+        self.apply_filter()
+
+    def update_sort_headings(self):
+        for column, label in self.column_labels.items():
+            text = label
+            if column == self.sort_column:
+                text += " v" if self.sort_desc else " ^"
+            if column in self.sortable_columns:
+                self.tree.heading(column, text=text, command=lambda c=column: self.sort_by(c))
+            else:
+                self.tree.heading(column, text=text)
 
     def get_selected_session(self):
         selection = self.tree.selection()
@@ -726,7 +779,9 @@ class SessionApp:
         self.title_overrides[session.session_id] = new_title
         save_title_overrides(self.titles_path, self.title_overrides)
         session.title = new_title
+        session.is_default_title = False
         session.search_blob = f"{session.title} {session.cwd} {session.session_id} {session.path}".lower()
+        apply_untitled_numbers(self.sessions)
         self.apply_filter(select_id=session.session_id)
 
     def reset_title_override(self):
@@ -738,6 +793,9 @@ class SessionApp:
             del self.title_overrides[session.session_id]
             save_title_overrides(self.titles_path, self.title_overrides)
         session.title = generate_title(session.path, session.session_id)
+        session.is_default_title = session.title == DEFAULT_TITLE
+        if session.is_default_title:
+            apply_untitled_numbers(self.sessions)
         session.search_blob = f"{session.title} {session.cwd} {session.session_id} {session.path}".lower()
         self.detail_vars["title"].set(session.title)
         self.apply_filter(select_id=session.session_id)
