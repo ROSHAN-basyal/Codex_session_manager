@@ -31,6 +31,7 @@ python codex_session_manager.py --sessions-dir "C:\Users\Asus\.codex\sessions"
 - Double-click a row (or click Resume) to launch `codex resume <session_id>`
 - Choose a CLI from the dropdown (default is saved and marked as `(default)` and used for Resume)
 - Open the original working directory
+- Open the session CWD in the selected terminal
 - Open the session log file
 - Edit titles (stored in `C:\Users\Asus\.codex\sessions\session mananger\titles\session_titles.json` by default)
 - Sort by Title, Created, or Updated via the column headers

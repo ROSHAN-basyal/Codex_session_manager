@@ -463,6 +463,34 @@ def build_resume_command(shell, session_id, cwd):
     return [exe]
 
 
+def build_terminal_command(shell, cwd):
+    label, kind, exe = shell
+    if os.name == "nt":
+        if kind == "cmd":
+            cmd_str = f'cd /d "{cwd}"' if cwd else ""
+            return [exe, "/k", cmd_str] if cmd_str else [exe]
+        if kind in ("powershell", "pwsh"):
+            if cwd:
+                cwd_literal = powershell_literal(cwd)
+                ps_cmd = f"Set-Location -LiteralPath '{cwd_literal}'"
+                return [exe, "-NoExit", "-Command", ps_cmd]
+            return [exe, "-NoExit"]
+        if kind == "gitbash":
+            if cwd:
+                cwd_literal = bash_quote(cwd)
+                bash_cmd = f"cd {cwd_literal}; exec bash"
+            else:
+                bash_cmd = "exec bash"
+            return [exe, "-c", bash_cmd]
+    else:
+        if cwd:
+            cmd = f"cd {bash_quote(cwd)}; exec {bash_quote(exe)}"
+        else:
+            cmd = f"exec {bash_quote(exe)}"
+        return [exe, "-c", cmd]
+    return [exe]
+
+
 def open_terminal(shell_cmd):
     if os.name == "nt":
         subprocess.Popen(shell_cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
@@ -646,6 +674,7 @@ class SessionApp:
         ttk.Button(buttons, text="Resume", command=self.resume_selected).pack(fill=tk.X)
         ttk.Button(buttons, text="Copy Session ID", command=self.copy_session_id).pack(fill=tk.X, pady=4)
         ttk.Button(buttons, text="Open CWD", command=self.open_cwd).pack(fill=tk.X)
+        ttk.Button(buttons, text="Open CWD in Terminal", command=self.open_cwd_terminal).pack(fill=tk.X, pady=4)
         ttk.Button(buttons, text="Open Log", command=self.open_log).pack(fill=tk.X, pady=4)
 
         status = ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=(10, 4))
@@ -864,6 +893,29 @@ class SessionApp:
                 subprocess.Popen(["xdg-open", session.cwd])
         except OSError:
             messagebox.showerror("Open CWD", "Could not open the session working directory.")
+
+    def open_cwd_terminal(self):
+        session = self.get_selected_session()
+        if not session or not session.cwd:
+            messagebox.showinfo("Open CWD in Terminal", "No CWD available for this session.")
+            return
+        options = available_shells()
+        if not options:
+            messagebox.showerror("No CLI found", "No available CLI shells were detected on this system.")
+            return
+        selected = match_preferred_cli(self.default_cli_pref, options)
+        if not selected and self.default_cli_pref:
+            messagebox.showinfo("Default CLI unavailable", "Saved CLI preference was not found. Select another CLI.")
+        if not selected:
+            selected = self.cli_display_map.get(self.cli_var.get())
+        if not selected:
+            messagebox.showinfo("Select CLI", "Select a CLI from the dropdown first.")
+            return
+        cmd = build_terminal_command(selected, session.cwd)
+        try:
+            open_terminal(cmd)
+        except FileNotFoundError:
+            messagebox.showerror("CLI not found", "Could not find the selected CLI.")
 
     def open_log(self):
         session = self.get_selected_session()
