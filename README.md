@@ -7,13 +7,21 @@ This GUI reads Codex session logs from your local machine and helps you search, 
 Use the built executable (recommended on Windows):
 
 ```
-dist/session_manager.exe
+dist_v3/session_manager_V3.exe
 ```
 
 Or run from source:
 
 ```powershell
 python codex_session_manager.py
+```
+
+## Build
+
+Use the command that works in PowerShell:
+
+```powershell
+python -m PyInstaller --onefile --noconsole --name session_manager_V3 codex_session_manager.py
 ```
 
 On first run, it opens a folder picker so you can choose your `.codex` folder (or any subfolder inside it).
