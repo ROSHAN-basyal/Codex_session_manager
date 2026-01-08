@@ -586,13 +586,29 @@ class SessionApp:
             "id": "Session ID",
         }
         self.sortable_columns = {"title", "created", "updated"}
+        self.layout_mode = None
+        self.left_min_width = 540
+        self.right_min_width = 340
+        self.breakpoint_width = self.left_min_width + self.right_min_width + 80
+        self.center = None
+        self.left_frame = None
+        self.right_frame = None
 
         self.root.title("Codex Sessions")
         self.root.geometry("1100x680")
-        self.root.minsize(900, 600)
+        self.root.minsize(760, 560)
+        self.apply_style()
         self.build_ui()
         self.load_settings()
         self.load_and_render()
+        self.root.bind("<Configure>", self.on_resize)
+
+    def apply_style(self):
+        style = ttk.Style()
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+        style.configure("Treeview", rowheight=24)
+        style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"))
 
     def build_ui(self):
         top = ttk.Frame(self.root, padding=10)
@@ -609,41 +625,46 @@ class SessionApp:
         ttk.Button(top, text="Search", command=self.apply_filter).pack(side=tk.LEFT)
         ttk.Button(top, text="Refresh", command=self.load_and_render).pack(side=tk.RIGHT)
 
-        paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=10)
 
-        left = ttk.Frame(paned)
-        right = ttk.Frame(paned, padding=10)
-        paned.add(left, weight=3)
-        paned.add(right, weight=1)
-        paned.paneconfigure(right, minsize=320)
+        self.center = ttk.Frame(self.root)
+        self.center.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        self.left_frame = ttk.Frame(self.center)
+        self.right_frame = ttk.Frame(self.center, padding=10)
 
         columns = ("title", "created", "updated", "cwd", "id")
-        self.tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
+        tree_frame = ttk.Frame(self.left_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse")
         self.update_sort_headings()
-        self.tree.column("title", width=280, stretch=True)
-        self.tree.column("created", width=120, stretch=False)
-        self.tree.column("updated", width=120, stretch=False)
-        self.tree.column("cwd", width=180, stretch=False)
+        self.tree.column("title", width=240, minwidth=160, stretch=True)
+        self.tree.column("created", width=120, minwidth=110, stretch=False)
+        self.tree.column("updated", width=120, minwidth=110, stretch=False)
+        self.tree.column("cwd", width=200, minwidth=140, stretch=True)
         self.tree.column("id", width=120, anchor=tk.CENTER, stretch=False)
-        self.tree.tag_configure("odd", background="#f5f5f5")
+        self.tree.tag_configure("odd", background="#f3f3f3")
 
-        scroll = ttk.Scrollbar(left, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        vscroll = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        hscroll = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vscroll.grid(row=0, column=1, sticky="ns")
+        hscroll.grid(row=1, column=0, sticky="ew")
+        tree_frame.grid_rowconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(0, weight=1)
 
         self.tree.bind("<<TreeviewSelect>>", lambda _event: self.update_details())
         self.tree.bind("<Double-1>", lambda _event: self.resume_selected())
 
-        ttk.Label(right, text="Title").pack(anchor=tk.W, pady=(0, 2))
+        ttk.Label(self.right_frame, text="Title").pack(anchor=tk.W, pady=(0, 2))
         title_var = tk.StringVar(value="-")
-        title_entry = ttk.Entry(right, textvariable=title_var)
+        title_entry = ttk.Entry(self.right_frame, textvariable=title_var)
         title_entry.pack(fill=tk.X, pady=(0, 6))
         title_entry.bind("<Return>", lambda _event: self.save_title_override())
         self.detail_vars["title"] = title_var
 
-        title_buttons = ttk.Frame(right)
+        title_buttons = ttk.Frame(self.right_frame)
         title_buttons.pack(fill=tk.X, pady=(0, 10))
         ttk.Button(title_buttons, text="Save Title", command=self.save_title_override).pack(side=tk.LEFT)
         ttk.Button(title_buttons, text="Reset Title", command=self.reset_title_override).pack(side=tk.LEFT, padx=6)
@@ -656,21 +677,21 @@ class SessionApp:
             ("Log File", "path"),
         ]
         for label, key in detail_fields:
-            ttk.Label(right, text=label).pack(anchor=tk.W, pady=(0, 2))
+            ttk.Label(self.right_frame, text=label).pack(anchor=tk.W, pady=(0, 2))
             var = tk.StringVar(value="-")
-            entry = ttk.Entry(right, textvariable=var, state="readonly")
+            entry = ttk.Entry(self.right_frame, textvariable=var, state="readonly")
             entry.pack(fill=tk.X, pady=(0, 8))
             self.detail_vars[key] = var
 
-        ttk.Label(right, text="CLI").pack(anchor=tk.W, pady=(4, 2))
-        self.cli_combo = ttk.Combobox(right, textvariable=self.cli_var, state="readonly")
+        ttk.Label(self.right_frame, text="CLI").pack(anchor=tk.W, pady=(4, 2))
+        self.cli_combo = ttk.Combobox(self.right_frame, textvariable=self.cli_var, state="readonly")
         self.cli_combo.pack(fill=tk.X, pady=(0, 6))
         self.cli_combo.bind("<<ComboboxSelected>>", lambda _event: self.on_cli_selected())
-        cli_buttons = ttk.Frame(right)
+        cli_buttons = ttk.Frame(self.right_frame)
         cli_buttons.pack(fill=tk.X, pady=(0, 10))
         ttk.Button(cli_buttons, text="Clear Default", command=self.clear_default_cli).pack(side=tk.LEFT)
 
-        buttons = ttk.Frame(right)
+        buttons = ttk.Frame(self.right_frame)
         buttons.pack(fill=tk.X, pady=(10, 0))
         ttk.Button(buttons, text="Resume", command=self.resume_selected).pack(fill=tk.X)
         ttk.Button(buttons, text="Copy Session ID", command=self.copy_session_id).pack(fill=tk.X, pady=4)
@@ -680,6 +701,7 @@ class SessionApp:
 
         status = ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=(10, 4))
         status.pack(side=tk.BOTTOM, fill=tk.X)
+        self.apply_layout("horizontal")
 
     def load_and_render(self):
         if not self.sessions_dir.exists():
@@ -747,6 +769,32 @@ class SessionApp:
             self.status_var.set(f"Showing {shown} of {total} sessions for filter: {query}")
         else:
             self.status_var.set(f"Showing {shown} sessions")
+
+    def on_resize(self, _event):
+        width = self.root.winfo_width()
+        mode = "vertical" if width < self.breakpoint_width else "horizontal"
+        if mode != self.layout_mode:
+            self.apply_layout(mode)
+
+    def apply_layout(self, mode):
+        self.layout_mode = mode
+        self.left_frame.grid_forget()
+        self.right_frame.grid_forget()
+        for idx in range(2):
+            self.center.grid_rowconfigure(idx, weight=0, minsize=0)
+            self.center.grid_columnconfigure(idx, weight=0, minsize=0)
+        if mode == "vertical":
+            self.center.grid_columnconfigure(0, weight=1, minsize=self.left_min_width)
+            self.center.grid_rowconfigure(0, weight=3, minsize=260)
+            self.center.grid_rowconfigure(1, weight=2, minsize=260)
+            self.left_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 8))
+            self.right_frame.grid(row=1, column=0, sticky="nsew")
+        else:
+            self.center.grid_rowconfigure(0, weight=1, minsize=400)
+            self.center.grid_columnconfigure(0, weight=3, minsize=self.left_min_width)
+            self.center.grid_columnconfigure(1, weight=1, minsize=self.right_min_width)
+            self.left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+            self.right_frame.grid(row=0, column=1, sticky="nsew")
 
     def get_sorted_sessions(self):
         key_map = {
