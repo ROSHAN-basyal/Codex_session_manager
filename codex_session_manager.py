@@ -431,83 +431,66 @@ def build_cli_display_options(options, default_opt):
     return display, mapping
 
 
-def build_resume_command(shell, session_id, cwd):
+def build_resume_command(shell, session_id):
     label, kind, exe = shell
     if os.name == "nt":
         if kind == "cmd":
-            if cwd:
-                cmd_str = f'cd /d "{cwd}" && codex resume {session_id}'
-            else:
-                cmd_str = f"codex resume {session_id}"
+            cmd_str = f"codex resume {session_id}"
             return [exe, "/k", cmd_str]
         if kind in ("powershell", "pwsh"):
-            if cwd:
-                cwd_literal = powershell_literal(cwd)
-                ps_cmd = f"Set-Location -LiteralPath '{cwd_literal}'; codex resume {session_id}"
-            else:
-                ps_cmd = f"codex resume {session_id}"
+            ps_cmd = f"codex resume {session_id}"
             return [exe, "-NoExit", "-Command", ps_cmd]
         if kind == "gitbash":
-            if cwd:
-                cwd_literal = bash_quote(cwd)
-                bash_cmd = f"cd {cwd_literal}; codex resume {session_id}; exec bash"
-            else:
-                bash_cmd = f"codex resume {session_id}; exec bash"
+            bash_cmd = f"codex resume {session_id}; exec bash"
             return [exe, "-c", bash_cmd]
     else:
-        if cwd:
-            cmd = f"cd {bash_quote(cwd)}; codex resume {session_id}; exec {bash_quote(exe)}"
-        else:
-            cmd = f"codex resume {session_id}; exec {bash_quote(exe)}"
+        cmd = f"codex resume {session_id}; exec {bash_quote(exe)}"
         return [exe, "-c", cmd]
     return [exe]
 
 
-def build_terminal_command(shell, cwd):
+def build_terminal_command(shell):
     label, kind, exe = shell
     if os.name == "nt":
         if kind == "cmd":
-            cmd_str = f'cd /d "{cwd}"' if cwd else ""
-            return [exe, "/k", cmd_str] if cmd_str else [exe]
+            return [exe]
         if kind in ("powershell", "pwsh"):
-            if cwd:
-                cwd_literal = powershell_literal(cwd)
-                ps_cmd = f"Set-Location -LiteralPath '{cwd_literal}'"
-                return [exe, "-NoExit", "-Command", ps_cmd]
             return [exe, "-NoExit"]
         if kind == "gitbash":
-            if cwd:
-                cwd_literal = bash_quote(cwd)
-                bash_cmd = f"cd {cwd_literal}; exec bash"
-            else:
-                bash_cmd = "exec bash"
-            return [exe, "-c", bash_cmd]
+            return [exe, "-c", "exec bash"]
     else:
-        if cwd:
-            cmd = f"cd {bash_quote(cwd)}; exec {bash_quote(exe)}"
-        else:
-            cmd = f"exec {bash_quote(exe)}"
-        return [exe, "-c", cmd]
+        return [exe, "-c", f"exec {bash_quote(exe)}"]
     return [exe]
 
 
-def open_terminal(shell_cmd):
+def safe_cwd(cwd):
+    if not cwd:
+        return None
+    try:
+        path = Path(cwd)
+    except (OSError, TypeError, ValueError):
+        return None
+    return str(path) if path.is_dir() else None
+
+
+def open_terminal(shell_cmd, cwd=None):
+    cwd = safe_cwd(cwd)
     if os.name == "nt":
-        subprocess.Popen(shell_cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
+        subprocess.Popen(shell_cmd, creationflags=subprocess.CREATE_NEW_CONSOLE, cwd=cwd)
         return
     terminal = shutil.which("x-terminal-emulator")
     if terminal:
-        subprocess.Popen([terminal, "-e"] + shell_cmd)
+        subprocess.Popen([terminal, "-e"] + shell_cmd, cwd=cwd)
         return
     terminal = shutil.which("gnome-terminal")
     if terminal:
-        subprocess.Popen([terminal, "--"] + shell_cmd)
+        subprocess.Popen([terminal, "--"] + shell_cmd, cwd=cwd)
         return
     terminal = shutil.which("xterm")
     if terminal:
-        subprocess.Popen([terminal, "-e"] + shell_cmd)
+        subprocess.Popen([terminal, "-e"] + shell_cmd, cwd=cwd)
         return
-    subprocess.Popen(shell_cmd)
+    subprocess.Popen(shell_cmd, cwd=cwd)
 
 
 def apply_untitled_numbers(sessions):
@@ -593,6 +576,10 @@ class SessionApp:
         self.center = None
         self.left_frame = None
         self.right_frame = None
+        self.right_container = None
+        self.right_canvas = None
+        self.right_scroll = None
+        self.right_window = None
 
         self.root.title("Codex Sessions")
         self.root.geometry("1100x680")
@@ -631,7 +618,16 @@ class SessionApp:
         self.center.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         self.left_frame = ttk.Frame(self.center)
-        self.right_frame = ttk.Frame(self.center, padding=10)
+        self.right_container = ttk.Frame(self.center)
+        self.right_canvas = tk.Canvas(self.right_container, highlightthickness=0)
+        self.right_scroll = ttk.Scrollbar(self.right_container, orient=tk.VERTICAL, command=self.right_canvas.yview)
+        self.right_canvas.configure(yscrollcommand=self.right_scroll.set)
+        self.right_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.right_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.right_frame = ttk.Frame(self.right_canvas, padding=10)
+        self.right_window = self.right_canvas.create_window((0, 0), window=self.right_frame, anchor="nw")
+        self.right_frame.bind("<Configure>", self.on_right_frame_configure)
+        self.right_canvas.bind("<Configure>", self.on_right_canvas_configure)
 
         columns = ("title", "created", "updated", "cwd", "id")
         tree_frame = ttk.Frame(self.left_frame)
@@ -779,7 +775,7 @@ class SessionApp:
     def apply_layout(self, mode):
         self.layout_mode = mode
         self.left_frame.grid_forget()
-        self.right_frame.grid_forget()
+        self.right_container.grid_forget()
         for idx in range(2):
             self.center.grid_rowconfigure(idx, weight=0, minsize=0)
             self.center.grid_columnconfigure(idx, weight=0, minsize=0)
@@ -788,13 +784,21 @@ class SessionApp:
             self.center.grid_rowconfigure(0, weight=3, minsize=260)
             self.center.grid_rowconfigure(1, weight=2, minsize=260)
             self.left_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 8))
-            self.right_frame.grid(row=1, column=0, sticky="nsew")
+            self.right_container.grid(row=1, column=0, sticky="nsew")
         else:
             self.center.grid_rowconfigure(0, weight=1, minsize=400)
             self.center.grid_columnconfigure(0, weight=3, minsize=self.left_min_width)
             self.center.grid_columnconfigure(1, weight=1, minsize=self.right_min_width)
             self.left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
-            self.right_frame.grid(row=0, column=1, sticky="nsew")
+            self.right_container.grid(row=0, column=1, sticky="nsew")
+
+    def on_right_frame_configure(self, _event):
+        if self.right_canvas:
+            self.right_canvas.configure(scrollregion=self.right_canvas.bbox("all"))
+
+    def on_right_canvas_configure(self, event):
+        if self.right_canvas and self.right_window:
+            self.right_canvas.itemconfigure(self.right_window, width=event.width)
 
     def get_sorted_sessions(self):
         key_map = {
@@ -895,9 +899,15 @@ class SessionApp:
         if not selected:
             messagebox.showinfo("Select CLI", "Select a CLI from the dropdown first.")
             return
-        cmd = build_resume_command(selected, session.session_id, session.cwd)
+        cmd = build_resume_command(selected, session.session_id)
+        cwd = safe_cwd(session.cwd)
+        if session.cwd and not cwd:
+            messagebox.showwarning(
+                "CWD not found",
+                "This session's working directory no longer exists. Opening in the default location.",
+            )
         try:
-            open_terminal(cmd)
+            open_terminal(cmd, cwd=cwd)
         except FileNotFoundError:
             messagebox.showerror("Codex not found", "Could not find the `codex` command in PATH.")
 
@@ -960,9 +970,15 @@ class SessionApp:
         if not selected:
             messagebox.showinfo("Select CLI", "Select a CLI from the dropdown first.")
             return
-        cmd = build_terminal_command(selected, session.cwd)
+        cmd = build_terminal_command(selected)
+        cwd = safe_cwd(session.cwd)
+        if session.cwd and not cwd:
+            messagebox.showwarning(
+                "CWD not found",
+                "This session's working directory no longer exists. Opening in the default location.",
+            )
         try:
-            open_terminal(cmd)
+            open_terminal(cmd, cwd=cwd)
         except FileNotFoundError:
             messagebox.showerror("CLI not found", "Could not find the selected CLI.")
 

@@ -1,0 +1,11 @@
+0000000000000000000000000000000000000000 53c2f2e6967576e2e4d671b6e66ff483591bfeb4 Roshan_Basyal <basroshan44@gmail.com> 1767465495 +0545	commit (initial): added readme and completed building
+53c2f2e6967576e2e4d671b6e66ff483591bfeb4 2cc852b94a3da7e031692a3baaa7540edff5bf7d Roshan_Basyal <basroshan44@gmail.com> 1767508788 +0545	commit: updated the working environment
+2cc852b94a3da7e031692a3baaa7540edff5bf7d 9d987d7743d92daade2758c798af8e9435b7e151 Roshan_Basyal <basroshan44@gmail.com> 1767875403 +0545	commit: added feature of opeing CWD in terminal directly
+9d987d7743d92daade2758c798af8e9435b7e151 e894cc81255a742b977e00942a3d934e4f001e68 Roshan_Basyal <basroshan44@gmail.com> 1767880194 +0545	commit: Update UI, sorting, and Windows build
+e894cc81255a742b977e00942a3d934e4f001e68 9d987d7743d92daade2758c798af8e9435b7e151 Roshan_Basyal <basroshan44@gmail.com> 1767883400 +0545	reset: moving to 9d987d7
+9d987d7743d92daade2758c798af8e9435b7e151 2519f8ffbbc32cafc50c8f7bf6caee4d7788c0a9 Roshan_Basyal <basroshan44@gmail.com> 1767884356 +0545	commit: Improve responsive layout and table scrolling
+2519f8ffbbc32cafc50c8f7bf6caee4d7788c0a9 2519f8ffbbc32cafc50c8f7bf6caee4d7788c0a9 Roshan_Basyal <basroshan44@gmail.com> 1767884369 +0545	reset: moving to HEAD
+2519f8ffbbc32cafc50c8f7bf6caee4d7788c0a9 e894cc81255a742b977e00942a3d934e4f001e68 Roshan_Basyal <basroshan44@gmail.com> 1767884373 +0545	pull --rebase origin master (start): checkout e894cc81255a742b977e00942a3d934e4f001e68
+e894cc81255a742b977e00942a3d934e4f001e68 98777259dfdef532f8522c688adf4717d36cf41a Roshan_Basyal <basroshan44@gmail.com> 1767884452 +0545	rebase (continue): Improve responsive layout and table scrolling
+98777259dfdef532f8522c688adf4717d36cf41a 98777259dfdef532f8522c688adf4717d36cf41a Roshan_Basyal <basroshan44@gmail.com> 1767884452 +0545	rebase (finish): returning to refs/heads/master
+98777259dfdef532f8522c688adf4717d36cf41a 4454c400ed4e8cbda714a2fd91091bf07b492798 Roshan_Basyal <basroshan44@gmail.com> 1767887199 +0545	commit: Fix resume cwd handling and add right-pane scrolling

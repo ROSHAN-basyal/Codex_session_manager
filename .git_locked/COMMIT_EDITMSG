@@ -1,0 +1,14 @@
+Improve responsive layout and table scrolling
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+#
+# interactive rebase in progress; onto e894cc8
+# Last command done (1 command done):
+#    pick 2519f8f Improve responsive layout and table scrolling
+# No commands remaining.
+# You are currently rebasing branch 'master' on 'e894cc8'.
+#
+# Changes to be committed:
+#	modified:   codex_session_manager.py
+#
