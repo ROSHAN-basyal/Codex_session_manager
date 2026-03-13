@@ -651,6 +651,20 @@ class SessionApp:
         self.center = None
         self.left_frame = None
         self.right_frame = None
+        self.palette = {
+            "bg": "#0f141b",
+            "panel": "#171d26",
+            "panel_alt": "#1d2531",
+            "field": "#222c39",
+            "border": "#2a3646",
+            "text": "#eef3f8",
+            "muted": "#92a1b3",
+            "accent": "#3c82f6",
+            "accent_hover": "#5694fb",
+            "accent_pressed": "#2e6fe8",
+            "row_even": "#1a2230",
+            "row_odd": "#202938",
+        }
 
         self.root.title("Codex Sessions")
         self.root.geometry("1100x680")
@@ -665,34 +679,117 @@ class SessionApp:
         style = ttk.Style()
         if "clam" in style.theme_names():
             style.theme_use("clam")
-        style.configure("Treeview", rowheight=24)
-        style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"))
+        base_font = "Segoe UI" if os.name == "nt" else "DejaVu Sans"
+        self.root.configure(bg=self.palette["bg"])
+
+        style.configure(".", background=self.palette["bg"], foreground=self.palette["text"], font=(base_font, 10))
+        style.configure("App.TFrame", background=self.palette["bg"])
+        style.configure("Card.TFrame", background=self.palette["panel"])
+        style.configure("Card.TLabel", background=self.palette["panel"], foreground=self.palette["text"])
+        style.configure("CardMuted.TLabel", background=self.palette["panel"], foreground=self.palette["muted"])
+        style.configure("Title.TLabel", background=self.palette["bg"], foreground=self.palette["text"], font=(base_font, 16, "bold"))
+        style.configure("Subtitle.TLabel", background=self.palette["bg"], foreground=self.palette["muted"], font=(base_font, 10))
+        style.configure("Section.TLabel", background=self.palette["panel"], foreground=self.palette["muted"], font=(base_font, 9, "bold"))
+        style.configure("Status.TLabel", background=self.palette["bg"], foreground=self.palette["muted"], font=(base_font, 9))
+
+        style.configure("Search.TEntry", fieldbackground=self.palette["field"], foreground=self.palette["text"], padding=(10, 8))
+        style.configure("Detail.TEntry", fieldbackground=self.palette["field"], foreground=self.palette["text"], padding=(10, 8))
+        style.map(
+            "Detail.TEntry",
+            fieldbackground=[("readonly", self.palette["field"])],
+            foreground=[("readonly", self.palette["text"])],
+        )
+
+        style.configure("TCombobox", fieldbackground=self.palette["field"], foreground=self.palette["text"], padding=6)
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", self.palette["field"])],
+            foreground=[("readonly", self.palette["text"])],
+        )
+        self.root.option_add("*TCombobox*Listbox*Background", self.palette["field"])
+        self.root.option_add("*TCombobox*Listbox*Foreground", self.palette["text"])
+        self.root.option_add("*TCombobox*Listbox*selectBackground", self.palette["accent"])
+        self.root.option_add("*TCombobox*Listbox*selectForeground", "#ffffff")
+
+        style.configure("TButton", background=self.palette["panel_alt"], foreground=self.palette["text"], padding=(12, 8))
+        style.map("TButton", background=[("active", self.palette["field"]), ("pressed", self.palette["field"])])
+        style.configure("Accent.TButton", background=self.palette["accent"], foreground="#ffffff", padding=(12, 8))
+        style.map(
+            "Accent.TButton",
+            background=[("active", self.palette["accent_hover"]), ("pressed", self.palette["accent_pressed"])],
+            foreground=[("disabled", self.palette["muted"])],
+        )
+
+        style.configure(
+            "Treeview",
+            background=self.palette["panel_alt"],
+            fieldbackground=self.palette["panel_alt"],
+            foreground=self.palette["text"],
+            rowheight=30,
+            borderwidth=0,
+        )
+        style.map("Treeview", background=[("selected", self.palette["accent"])], foreground=[("selected", "#ffffff")])
+        style.configure(
+            "Treeview.Heading",
+            background=self.palette["panel"],
+            foreground=self.palette["muted"],
+            font=(base_font, 9, "bold"),
+            padding=(10, 8),
+            borderwidth=0,
+        )
+        style.map(
+            "Treeview.Heading",
+            background=[("active", self.palette["panel_alt"])],
+            foreground=[("active", self.palette["text"])],
+        )
+
+        style.configure("Vertical.TScrollbar", background=self.palette["panel_alt"], troughcolor=self.palette["panel"])
+        style.configure("Horizontal.TScrollbar", background=self.palette["panel_alt"], troughcolor=self.palette["panel"])
+        style.configure("TSeparator", background=self.palette["border"])
 
     def build_ui(self):
-        top = ttk.Frame(self.root, padding=10)
+        top = ttk.Frame(self.root, style="App.TFrame", padding=(18, 18, 18, 10))
         top.pack(fill=tk.X)
 
-        search_frame = tk.Frame(top, highlightthickness=1, highlightbackground="#c0c0c0")
-        search_frame.pack(side=tk.LEFT, padx=8)
-        search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=46)
-        search_entry.pack(side=tk.LEFT, padx=(6, 2), pady=2)
+        header = ttk.Frame(top, style="App.TFrame")
+        header.pack(fill=tk.X, pady=(0, 12))
+        title_block = ttk.Frame(header, style="App.TFrame")
+        title_block.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(title_block, text="Codex Sessions", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(
+            title_block,
+            text="Browse, rename, and resume your local session history.",
+            style="Subtitle.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 0))
+        ttk.Button(header, text="Refresh", command=self.load_and_render).pack(side=tk.RIGHT)
+
+        toolbar = ttk.Frame(top, style="App.TFrame")
+        toolbar.pack(fill=tk.X)
+
+        search_frame = ttk.Frame(toolbar, style="Card.TFrame", padding=(14, 12))
+        search_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        ttk.Label(search_frame, text="Search", style="Section.TLabel").pack(anchor=tk.W, pady=(0, 8))
+        search_row = ttk.Frame(search_frame, style="Card.TFrame")
+        search_row.pack(fill=tk.X)
+        search_entry = ttk.Entry(search_row, textvariable=self.search_var, width=46, style="Search.TEntry")
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_entry.bind("<Return>", lambda _event: self.apply_filter())
-        clear_btn = ttk.Button(search_frame, text="x", width=2, command=self.clear_filter)
-        clear_btn.pack(side=tk.LEFT, padx=(0, 4), pady=2)
+        ttk.Button(search_row, text="Clear", command=self.clear_filter).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(toolbar, text="Search", style="Accent.TButton", command=self.apply_filter).pack(side=tk.LEFT)
 
-        ttk.Button(top, text="Search", command=self.apply_filter).pack(side=tk.LEFT)
-        ttk.Button(top, text="Refresh", command=self.load_and_render).pack(side=tk.RIGHT)
+        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=18)
 
-        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=10)
+        self.center = ttk.Frame(self.root, style="App.TFrame")
+        self.center.pack(fill=tk.BOTH, expand=True, padx=18, pady=16)
 
-        self.center = ttk.Frame(self.root)
-        self.center.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.left_frame = ttk.Frame(self.center, style="Card.TFrame", padding=(16, 14, 16, 14))
+        self.right_frame = ttk.Frame(self.center, style="Card.TFrame", padding=(16, 16, 16, 16))
 
-        self.left_frame = ttk.Frame(self.center)
-        self.right_frame = ttk.Frame(self.center, padding=10)
+        ttk.Label(self.left_frame, text="Sessions", style="Section.TLabel").pack(anchor=tk.W)
+        ttk.Label(self.left_frame, text="Double-click a row to resume it.", style="CardMuted.TLabel").pack(anchor=tk.W, pady=(2, 12))
 
         columns = ("title", "created", "updated", "cwd", "id")
-        tree_frame = ttk.Frame(self.left_frame)
+        tree_frame = ttk.Frame(self.left_frame, style="Card.TFrame")
         tree_frame.pack(fill=tk.BOTH, expand=True)
         self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse")
         self.update_sort_headings()
@@ -701,7 +798,8 @@ class SessionApp:
         self.tree.column("updated", width=120, minwidth=110, stretch=False)
         self.tree.column("cwd", width=200, minwidth=140, stretch=True)
         self.tree.column("id", width=120, anchor=tk.CENTER, stretch=False)
-        self.tree.tag_configure("odd", background="#f3f3f3")
+        self.tree.tag_configure("even", background=self.palette["row_even"])
+        self.tree.tag_configure("odd", background=self.palette["row_odd"])
 
         vscroll = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
         hscroll = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
@@ -715,15 +813,18 @@ class SessionApp:
         self.tree.bind("<<TreeviewSelect>>", lambda _event: self.update_details())
         self.tree.bind("<Double-1>", lambda _event: self.resume_selected())
 
-        ttk.Label(self.right_frame, text="Title").pack(anchor=tk.W, pady=(0, 2))
+        ttk.Label(self.right_frame, text="Session Details", style="Section.TLabel").pack(anchor=tk.W)
+        ttk.Label(self.right_frame, text="Edit labels and launch the selected session.", style="CardMuted.TLabel").pack(anchor=tk.W, pady=(2, 14))
+
+        ttk.Label(self.right_frame, text="Title", style="Card.TLabel").pack(anchor=tk.W, pady=(0, 4))
         title_var = tk.StringVar(value="-")
-        title_entry = ttk.Entry(self.right_frame, textvariable=title_var)
-        title_entry.pack(fill=tk.X, pady=(0, 6))
+        title_entry = ttk.Entry(self.right_frame, textvariable=title_var, style="Detail.TEntry")
+        title_entry.pack(fill=tk.X, pady=(0, 8))
         title_entry.bind("<Return>", lambda _event: self.save_title_override())
         self.detail_vars["title"] = title_var
 
-        title_buttons = ttk.Frame(self.right_frame)
-        title_buttons.pack(fill=tk.X, pady=(0, 10))
+        title_buttons = ttk.Frame(self.right_frame, style="Card.TFrame")
+        title_buttons.pack(fill=tk.X, pady=(0, 14))
         ttk.Button(title_buttons, text="Save Title", command=self.save_title_override).pack(side=tk.LEFT)
         ttk.Button(title_buttons, text="Reset Title", command=self.reset_title_override).pack(side=tk.LEFT, padx=6)
 
@@ -735,29 +836,29 @@ class SessionApp:
             ("Log File", "path"),
         ]
         for label, key in detail_fields:
-            ttk.Label(self.right_frame, text=label).pack(anchor=tk.W, pady=(0, 2))
+            ttk.Label(self.right_frame, text=label, style="Card.TLabel").pack(anchor=tk.W, pady=(0, 4))
             var = tk.StringVar(value="-")
-            entry = ttk.Entry(self.right_frame, textvariable=var, state="readonly")
-            entry.pack(fill=tk.X, pady=(0, 8))
+            entry = ttk.Entry(self.right_frame, textvariable=var, state="readonly", style="Detail.TEntry")
+            entry.pack(fill=tk.X, pady=(0, 10))
             self.detail_vars[key] = var
 
-        ttk.Label(self.right_frame, text="CLI").pack(anchor=tk.W, pady=(4, 2))
+        ttk.Label(self.right_frame, text="CLI", style="Card.TLabel").pack(anchor=tk.W, pady=(6, 4))
         self.cli_combo = ttk.Combobox(self.right_frame, textvariable=self.cli_var, state="readonly")
-        self.cli_combo.pack(fill=tk.X, pady=(0, 6))
+        self.cli_combo.pack(fill=tk.X, pady=(0, 8))
         self.cli_combo.bind("<<ComboboxSelected>>", lambda _event: self.on_cli_selected())
-        cli_buttons = ttk.Frame(self.right_frame)
-        cli_buttons.pack(fill=tk.X, pady=(0, 10))
+        cli_buttons = ttk.Frame(self.right_frame, style="Card.TFrame")
+        cli_buttons.pack(fill=tk.X, pady=(0, 14))
         ttk.Button(cli_buttons, text="Clear Default", command=self.clear_default_cli).pack(side=tk.LEFT)
 
-        buttons = ttk.Frame(self.right_frame)
+        buttons = ttk.Frame(self.right_frame, style="Card.TFrame")
         buttons.pack(fill=tk.X, pady=(10, 0))
-        ttk.Button(buttons, text="Resume", command=self.resume_selected).pack(fill=tk.X)
-        ttk.Button(buttons, text="Copy Session ID", command=self.copy_session_id).pack(fill=tk.X, pady=4)
+        ttk.Button(buttons, text="Resume", style="Accent.TButton", command=self.resume_selected).pack(fill=tk.X)
+        ttk.Button(buttons, text="Copy Session ID", command=self.copy_session_id).pack(fill=tk.X, pady=6)
         ttk.Button(buttons, text="Open CWD", command=self.open_cwd).pack(fill=tk.X)
-        ttk.Button(buttons, text="Open CWD in Terminal", command=self.open_cwd_terminal).pack(fill=tk.X, pady=4)
-        ttk.Button(buttons, text="Open Log", command=self.open_log).pack(fill=tk.X, pady=4)
+        ttk.Button(buttons, text="Open CWD in Terminal", command=self.open_cwd_terminal).pack(fill=tk.X, pady=6)
+        ttk.Button(buttons, text="Open Log", command=self.open_log).pack(fill=tk.X)
 
-        status = ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=(10, 4))
+        status = ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=(18, 8), style="Status.TLabel")
         status.pack(side=tk.BOTTOM, fill=tk.X)
         self.apply_layout("horizontal")
 
