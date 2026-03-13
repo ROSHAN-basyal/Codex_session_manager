@@ -6,4 +6,5 @@ dist_v3/*
 !dist_v3/*.exe
 *.spec
 __pycache__/
+.venv/
 .codex_session_manager/

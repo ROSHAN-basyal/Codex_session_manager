@@ -1,61 +1,121 @@
 # Codex Session Browser
 
-This GUI reads Codex session logs from your local machine and helps you search, inspect, and resume sessions. It only saves your custom session titles.
+This is a Tkinter GUI for browsing local Codex sessions, editing titles, opening session folders/logs, and resuming a session in a shell.
 
-## Run
+The project started as a Windows-only utility. The source now also supports Linux desktop environments, including Arch/EndeavourOS, as long as Tk and a terminal emulator are installed.
 
-Use the built executable (recommended on Windows):
+## Run From Source
 
-```
-dist_v3/session_manager_V3.exe
-```
-
-Or run from source:
-
-```powershell
+```bash
 python codex_session_manager.py
+```
+
+Optional override for a specific sessions directory:
+
+```bash
+python codex_session_manager.py --sessions-dir "$HOME/.codex/sessions"
+```
+
+Startup order:
+
+1. `--sessions-dir`, if provided
+2. previously saved app config
+3. default `~/.codex/sessions`, if it exists
+4. GUI folder picker
+
+## Linux VM Setup
+
+Inside your Linux VM:
+
+```bash
+python -m venv .venv
+./scripts/setup_linux_venv.sh
+./scripts/run_linux_gui.sh
+```
+
+The setup script validates:
+
+- the project-local virtual environment
+- Tk availability in that venv
+- `xdg-open`
+- a supported terminal emulator
+- whether `codex` is on `PATH`
+
+If Tk is missing, the script stops with the exact `pacman` packages you need to install in the VM.
+
+## Linux Requirements
+
+This app needs:
+
+- Python 3
+- Tk support for Python
+- a graphical desktop session (`DISPLAY` or `WAYLAND_DISPLAY`)
+- a terminal emulator for Resume / Open CWD in Terminal
+- `xdg-open` from `xdg-utils` for opening logs and folders
+
+For Arch / EndeavourOS, install the system packages in your Linux VM:
+
+```bash
+sudo pacman -S python tk xdg-utils
+```
+
+Recommended terminal emulators on Linux:
+
+- `gnome-terminal`
+- `konsole`
+- `kitty`
+- `xfce4-terminal`
+- `tilix`
+- `alacritty`
+- `xterm`
+
+The app does not install Tk through `pip`; Tk is an OS package.
+
+## Windows Run
+
+The existing Windows build artifact is still included:
+
+```text
+dist_v3/session_manager_V3.exe
 ```
 
 ## Build
 
-Use the command that works in PowerShell:
+Windows example:
 
 ```powershell
 python -m PyInstaller --onefile --noconsole --name session_manager_V3 codex_session_manager.py
 ```
 
-On first run, it opens a folder picker so you can choose your `.codex` folder (or any subfolder inside it).
-The selection is saved for next time.
+Linux example:
 
-Optional override for the sessions directory:
-
-```powershell
-python codex_session_manager.py --sessions-dir "C:\Users\Asus\.codex\sessions"
+```bash
+python -m PyInstaller --onefile --windowed --name session_manager_linux codex_session_manager.py
 ```
 
-## What you can do
+## What The App Stores
+
+- title overrides: `<sessions_dir>/session mananger/titles/session_titles.json`
+- CLI preference: `<sessions_dir>/session mananger/settings.json`
+- app config on Linux: `${XDG_CONFIG_HOME:-~/.config}/.codex_session_manager/config.json`
+- app config on Windows: `%APPDATA%\.codex_session_manager\config.json`
+
+The `session mananger` directory name is kept as-is for compatibility with the existing app data.
+
+## Features
 
 - Search by title, cwd, session id, or file path
-- Double-click a row (or click Resume) to launch `codex resume <session_id>`
-- Choose a CLI from the dropdown (default is saved and marked as `(default)` and used for Resume)
-- Open the original working directory
-- Open the session CWD in the selected terminal
-- Open the session log file
-- Edit titles (stored in `C:\Users\Asus\.codex\sessions\session mananger\titles\session_titles.json` by default)
-- Sort by Title, Created, or Updated via the column headers
-- App config is stored at `C:\Users\Asus\.codex_session_manager\config.json`
+- Sort by Title, Created, or Updated
+- Resume the selected session with `codex resume <session_id>`
+- Open the session working directory
+- Open the session working directory in the selected shell
+- Open the raw rollout log
+- Save and reset custom titles
 
-## Setup notes
+## GUI Layout
 
-- On first run, the app opens a folder picker (like an installer). Select `.codex` or any subfolder inside it.
-- The app resolves the correct `...\.codex\sessions` directory and creates `session mananger/titles/session_titles.json`.
-- The app also creates `session mananger/settings.json` in the same place.
-- The chosen location is saved in `C:\Users\Asus\.codex_session_manager\config.json`.
+- top bar: search, clear, search button, refresh button
+- center: session table
+- right panel: title editor, metadata, shell selector, actions
 
-## GUI overview
-
-- Top bar: search field with inline clear, plus Search and Refresh buttons.
-- Center: sortable session table (Title, Created, Updated, CWD, Session ID).
-- Right panel: title editor, session details, CLI dropdown, and action buttons.
-
-See `GUIDE.md` for more details.
+See `GUIDE.md` for the day-to-day usage flow.

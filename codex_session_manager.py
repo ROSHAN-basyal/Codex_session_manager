@@ -8,8 +8,17 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+except ImportError as exc:
+    tk = None
+    filedialog = None
+    messagebox = None
+    ttk = None
+    TK_IMPORT_ERROR = exc
+else:
+    TK_IMPORT_ERROR = None
 
 
 DEFAULT_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
@@ -51,6 +60,13 @@ def format_local(value):
     if not dt:
         return "-"
     return dt.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def sort_timestamp(value):
+    dt = parse_iso(value)
+    if not dt:
+        return float("-inf")
+    return dt.timestamp()
 
 
 def iso_from_mtime(path):
@@ -210,7 +226,13 @@ def default_settings_path(sessions_dir):
 
 
 def app_config_path():
-    return Path.home() / APP_CONFIG_DIRNAME / APP_CONFIG_FILENAME
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or Path.home())
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
+    return base / APP_CONFIG_DIRNAME / APP_CONFIG_FILENAME
 
 
 def load_app_config(path):
@@ -370,6 +392,19 @@ def available_shells():
     return shells
 
 
+def linux_terminal_candidates():
+    return [
+        ("x-terminal-emulator", lambda exe, shell_cmd: [exe, "-e"] + shell_cmd),
+        ("gnome-terminal", lambda exe, shell_cmd: [exe, "--"] + shell_cmd),
+        ("konsole", lambda exe, shell_cmd: [exe, "-e"] + shell_cmd),
+        ("xfce4-terminal", lambda exe, shell_cmd: [exe, "-x"] + shell_cmd),
+        ("tilix", lambda exe, shell_cmd: [exe, "-e"] + shell_cmd),
+        ("alacritty", lambda exe, shell_cmd: [exe, "-e"] + shell_cmd),
+        ("kitty", lambda exe, shell_cmd: [exe] + shell_cmd),
+        ("xterm", lambda exe, shell_cmd: [exe, "-e"] + shell_cmd),
+    ]
+
+
 def match_preferred_cli(pref, options):
     if not isinstance(pref, dict):
         return None
@@ -495,24 +530,47 @@ def open_terminal(shell_cmd):
     if os.name == "nt":
         subprocess.Popen(shell_cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
         return
-    terminal = shutil.which("x-terminal-emulator")
-    if terminal:
-        subprocess.Popen([terminal, "-e"] + shell_cmd)
+    for terminal_name, builder in linux_terminal_candidates():
+        terminal = shutil.which(terminal_name)
+        if terminal:
+            subprocess.Popen(builder(terminal, shell_cmd))
+            return
+    raise RuntimeError("No supported terminal emulator was found. Install one such as gnome-terminal, konsole, kitty, xfce4-terminal, alacritty, or xterm.")
+
+
+def open_with_default_app(target):
+    if os.name == "nt":
+        os.startfile(target)
         return
-    terminal = shutil.which("gnome-terminal")
-    if terminal:
-        subprocess.Popen([terminal, "--"] + shell_cmd)
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", str(target)])
         return
-    terminal = shutil.which("xterm")
-    if terminal:
-        subprocess.Popen([terminal, "-e"] + shell_cmd)
-        return
-    subprocess.Popen(shell_cmd)
+    opener = shutil.which("xdg-open")
+    if not opener:
+        raise RuntimeError("`xdg-open` was not found. Install xdg-utils to open files and folders from the GUI.")
+    subprocess.Popen([opener, str(target)])
+
+
+def ensure_gui_runtime():
+    if tk is None:
+        lines = ["Tkinter is not available in this Python runtime."]
+        if sys.platform.startswith("linux"):
+            lines.append("Install the Tk package for your distro, for example `sudo pacman -S tk` on Arch Linux.")
+        elif sys.platform == "darwin":
+            lines.append("Install a Python build that includes Tk support.")
+        else:
+            lines.append("Install Python with Tk support enabled.")
+        if TK_IMPORT_ERROR is not None:
+            lines.append(f"Original import error: {TK_IMPORT_ERROR}")
+        raise SystemExit("\n".join(lines))
+    if os.name != "nt" and sys.platform != "darwin":
+        if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+            raise SystemExit("No graphical desktop session detected. Start the app with DISPLAY or WAYLAND_DISPLAY set.")
 
 
 def apply_untitled_numbers(sessions):
     untitled = [s for s in sessions if s.is_default_title]
-    untitled.sort(key=lambda s: parse_iso(s.created_at) or datetime.min)
+    untitled.sort(key=lambda s: sort_timestamp(s.created_at))
     for idx, session in enumerate(untitled, start=1):
         session.title = f"{DEFAULT_TITLE}_{idx}"
         session.search_blob = f"{session.title} {session.cwd} {session.session_id} {session.path}".lower()
@@ -553,7 +611,7 @@ def load_sessions(root_dir, title_overrides):
             )
         )
     apply_untitled_numbers(sessions)
-    sessions.sort(key=lambda s: parse_iso(s.created_at) or datetime.min, reverse=True)
+    sessions.sort(key=lambda s: sort_timestamp(s.created_at), reverse=True)
     return sessions
 
 
@@ -799,8 +857,8 @@ class SessionApp:
     def get_sorted_sessions(self):
         key_map = {
             "title": lambda s: s.title.lower(),
-            "created": lambda s: parse_iso(s.created_at) or datetime.min,
-            "updated": lambda s: parse_iso(s.updated_at) or datetime.min,
+            "created": lambda s: sort_timestamp(s.created_at),
+            "updated": lambda s: sort_timestamp(s.updated_at),
         }
         key_func = key_map.get(self.sort_column, lambda s: s.title.lower())
         return sorted(self.sessions, key=key_func, reverse=self.sort_desc)
@@ -895,11 +953,14 @@ class SessionApp:
         if not selected:
             messagebox.showinfo("Select CLI", "Select a CLI from the dropdown first.")
             return
+        if not shutil.which("codex"):
+            messagebox.showerror("Codex not found", "Could not find the `codex` command in PATH.")
+            return
         cmd = build_resume_command(selected, session.session_id, session.cwd)
         try:
             open_terminal(cmd)
-        except FileNotFoundError:
-            messagebox.showerror("Codex not found", "Could not find the `codex` command in PATH.")
+        except RuntimeError as exc:
+            messagebox.showerror("Open Terminal", str(exc))
 
     def on_cli_selected(self):
         display = self.cli_var.get()
@@ -934,14 +995,9 @@ class SessionApp:
             messagebox.showinfo("Open CWD", "No CWD available for this session.")
             return
         try:
-            if os.name == "nt":
-                os.startfile(session.cwd)
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", session.cwd])
-            else:
-                subprocess.Popen(["xdg-open", session.cwd])
-        except OSError:
-            messagebox.showerror("Open CWD", "Could not open the session working directory.")
+            open_with_default_app(session.cwd)
+        except (OSError, RuntimeError) as exc:
+            messagebox.showerror("Open CWD", f"Could not open the session working directory.\n\n{exc}")
 
     def open_cwd_terminal(self):
         session = self.get_selected_session()
@@ -963,8 +1019,8 @@ class SessionApp:
         cmd = build_terminal_command(selected, session.cwd)
         try:
             open_terminal(cmd)
-        except FileNotFoundError:
-            messagebox.showerror("CLI not found", "Could not find the selected CLI.")
+        except RuntimeError as exc:
+            messagebox.showerror("Open Terminal", str(exc))
 
     def open_log(self):
         session = self.get_selected_session()
@@ -972,19 +1028,14 @@ class SessionApp:
             messagebox.showinfo("Open Log", "Select a session first.")
             return
         try:
-            if os.name == "nt":
-                os.startfile(session.path)
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", str(session.path)])
-            else:
-                subprocess.Popen(["xdg-open", str(session.path)])
-        except OSError:
-            messagebox.showerror("Open Log", "Could not open the session log file.")
+            open_with_default_app(session.path)
+        except (OSError, RuntimeError) as exc:
+            messagebox.showerror("Open Log", f"Could not open the session log file.\n\n{exc}")
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Codex session browser")
-    parser.add_argument("--sessions-dir", default=str(DEFAULT_SESSIONS_DIR))
+    parser.add_argument("--sessions-dir", default="")
     parser.add_argument("--titles-file", default="")
     parser.add_argument("--settings-file", default="")
     return parser.parse_args()
@@ -992,18 +1043,22 @@ def parse_args():
 
 def main():
     args = parse_args()
-    sessions_dir = None
+    config = load_app_config(app_config_path())
+    configured_dir = config.get("sessions_dir") if isinstance(config, dict) else None
+
     if args.sessions_dir:
         sessions_dir = resolve_sessions_dir_from_choice(args.sessions_dir) or Path(args.sessions_dir)
+    elif configured_dir:
+        sessions_dir = Path(configured_dir)
+    elif DEFAULT_SESSIONS_DIR.exists():
+        sessions_dir = DEFAULT_SESSIONS_DIR
     else:
-        config = load_app_config(app_config_path())
-        configured = config.get("sessions_dir") if isinstance(config, dict) else None
-        if configured:
-            sessions_dir = Path(configured)
-    if sessions_dir is None:
+        ensure_gui_runtime()
         sessions_dir = choose_codex_dir()
         if sessions_dir is None:
             return
+    ensure_gui_runtime()
+    sessions_dir = Path(sessions_dir)
     sessions_dir.mkdir(parents=True, exist_ok=True)
     ensure_manager_dirs(sessions_dir)
     save_app_config(app_config_path(), sessions_dir)
