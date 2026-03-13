@@ -21,6 +21,10 @@ else
 fi
 
 VENV_PYTHON="$VENV_DIR/bin/python"
+VENV_PIP="$VENV_DIR/bin/pip"
+
+echo "Installing CustomTkinter and dependencies"
+"$VENV_PIP" install --quiet customtkinter
 
 echo "Checking Tk support in the virtual environment"
 if ! "$VENV_PYTHON" - <<'PY'

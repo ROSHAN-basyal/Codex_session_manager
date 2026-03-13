@@ -1,6 +1,6 @@
 # Codex Session Browser
 
-This is a Tkinter GUI for browsing local Codex sessions, editing titles, opening session folders/logs, and resuming a session in a shell.
+This is a modern GUI for browsing local Codex sessions, editing titles, opening session folders/logs, and resuming a session in a shell. The interface is built with **CustomTkinter** and features a sleek, system-adaptive dark/light theme.
 
 The project started as a Windows-only utility. The source now also supports Linux desktop environments, including Arch/EndeavourOS, as long as Tk and a terminal emulator are installed.
 
@@ -36,6 +36,7 @@ python -m venv .venv
 The setup script validates:
 
 - the project-local virtual environment
+- CustomTkinter installation (auto-installed via pip)
 - Tk availability in that venv
 - `xdg-open`
 - a supported terminal emulator
@@ -49,6 +50,7 @@ This app needs:
 
 - Python 3
 - Tk support for Python
+- CustomTkinter (auto-installed by the setup script via `pip install customtkinter`)
 - a graphical desktop session (`DISPLAY` or `WAYLAND_DISPLAY`)
 - a terminal emulator for Resume / Open CWD in Terminal
 - `xdg-open` from `xdg-utils` for opening logs and folders
@@ -69,7 +71,7 @@ Recommended terminal emulators on Linux:
 - `alacritty`
 - `xterm`
 
-The app does not install Tk through `pip`; Tk is an OS package.
+The app does not install Tk through `pip`; Tk is an OS package. CustomTkinter is installed via pip in the virtual environment.
 
 ## Windows Run
 

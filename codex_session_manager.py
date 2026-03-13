@@ -9,9 +9,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
+    import customtkinter as ctk
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
 except ImportError as exc:
+    ctk = None
     tk = None
     filedialog = None
     messagebox = None
@@ -552,14 +554,15 @@ def open_with_default_app(target):
 
 
 def ensure_gui_runtime():
-    if tk is None:
-        lines = ["Tkinter is not available in this Python runtime."]
+    if ctk is None:
+        lines = ["CustomTkinter is not available in this Python runtime."]
         if sys.platform.startswith("linux"):
-            lines.append("Install the Tk package for your distro, for example `sudo pacman -S tk` on Arch Linux.")
+            lines.append("Install it with: pip install customtkinter")
+            lines.append("Also ensure Tk is installed: sudo pacman -S tk (Arch) or sudo apt install python3-tk (Debian/Ubuntu)")
         elif sys.platform == "darwin":
-            lines.append("Install a Python build that includes Tk support.")
+            lines.append("Install it with: pip install customtkinter")
         else:
-            lines.append("Install Python with Tk support enabled.")
+            lines.append("Install it with: pip install customtkinter")
         if TK_IMPORT_ERROR is not None:
             lines.append(f"Original import error: {TK_IMPORT_ERROR}")
         raise SystemExit("\n".join(lines))
@@ -615,6 +618,77 @@ def load_sessions(root_dir, title_overrides):
     return sessions
 
 
+# ---------------------------------------------------------------------------
+#  Themed colors helper — derives Treeview colors from current CTk mode
+# ---------------------------------------------------------------------------
+
+def _get_theme_colors():
+    """Return a dict of context-aware colors based on current appearance mode."""
+    mode = ctk.get_appearance_mode().lower()
+    if mode == "dark":
+        return {
+            "bg": "#1a1b26",
+            "panel": "#1e2030",
+            "panel_alt": "#24273a",
+            "field": "#2a2d3e",
+            "border": "#363a4f",
+            "text": "#cad3f5",
+            "muted": "#6e738d",
+            "accent": "#7aa2f7",
+            "accent_hover": "#89b4fa",
+            "accent_pressed": "#5d7cc7",
+            "row_even": "#1e2030",
+            "row_odd": "#24273a",
+            "heading_bg": "#181926",
+            "selected": "#3d59a1",
+            "selected_fg": "#ffffff",
+            "danger": "#f7768e",
+            "danger_hover": "#ff9e9e",
+            "success": "#9ece6a",
+            "separator": "#363a4f",
+        }
+    else:
+        return {
+            "bg": "#eff1f5",
+            "panel": "#ffffff",
+            "panel_alt": "#e6e9ef",
+            "field": "#dce0e8",
+            "border": "#ccd0da",
+            "text": "#4c4f69",
+            "muted": "#8c8fa1",
+            "accent": "#1e66f5",
+            "accent_hover": "#4c82f8",
+            "accent_pressed": "#1654d6",
+            "row_even": "#ffffff",
+            "row_odd": "#eff1f5",
+            "heading_bg": "#e6e9ef",
+            "selected": "#1e66f5",
+            "selected_fg": "#ffffff",
+            "danger": "#d20f39",
+            "danger_hover": "#e63c5c",
+            "success": "#40a02b",
+            "separator": "#ccd0da",
+        }
+
+
+# ---------------------------------------------------------------------------
+#  Font helper
+# ---------------------------------------------------------------------------
+
+def _pick_font():
+    """Choose the best available font family."""
+    if os.name == "nt":
+        return "Segoe UI"
+    for candidate in ["Inter", "Cantarell", "Noto Sans", "DejaVu Sans", "Liberation Sans"]:
+        # We don't validate font availability here; Tk will fall back gracefully
+        pass
+    return "Sans"
+
+
+# ---------------------------------------------------------------------------
+#  SessionApp — the full GUI
+# ---------------------------------------------------------------------------
+
 class SessionApp:
     def __init__(self, root, sessions_dir, titles_path, settings_path):
         self.root = root
@@ -651,158 +725,218 @@ class SessionApp:
         self.center = None
         self.left_frame = None
         self.right_frame = None
-        self.palette = {
-            "bg": "#0f141b",
-            "panel": "#171d26",
-            "panel_alt": "#1d2531",
-            "field": "#222c39",
-            "border": "#2a3646",
-            "text": "#eef3f8",
-            "muted": "#92a1b3",
-            "accent": "#3c82f6",
-            "accent_hover": "#5694fb",
-            "accent_pressed": "#2e6fe8",
-            "row_even": "#1a2230",
-            "row_odd": "#202938",
-        }
+
+        self.font_family = _pick_font()
+        self.colors = _get_theme_colors()
 
         self.root.title("Codex Sessions")
-        self.root.geometry("1100x680")
-        self.root.minsize(760, 560)
-        self.apply_style()
+        self.root.geometry("1140x720")
+        self.root.minsize(780, 580)
+
+        self._style_treeview()
         self.build_ui()
         self.load_settings()
         self.load_and_render()
         self.root.bind("<Configure>", self.on_resize)
 
-    def apply_style(self):
+    # ------------------------------------------------------------------
+    #  Style the ttk.Treeview to match CustomTkinter theme
+    # ------------------------------------------------------------------
+
+    def _style_treeview(self):
+        c = self.colors
         style = ttk.Style()
         if "clam" in style.theme_names():
             style.theme_use("clam")
-        base_font = "Segoe UI" if os.name == "nt" else "DejaVu Sans"
-        self.root.configure(bg=self.palette["bg"])
-
-        style.configure(".", background=self.palette["bg"], foreground=self.palette["text"], font=(base_font, 10))
-        style.configure("App.TFrame", background=self.palette["bg"])
-        style.configure("Card.TFrame", background=self.palette["panel"])
-        style.configure("Card.TLabel", background=self.palette["panel"], foreground=self.palette["text"])
-        style.configure("CardMuted.TLabel", background=self.palette["panel"], foreground=self.palette["muted"])
-        style.configure("Title.TLabel", background=self.palette["bg"], foreground=self.palette["text"], font=(base_font, 16, "bold"))
-        style.configure("Subtitle.TLabel", background=self.palette["bg"], foreground=self.palette["muted"], font=(base_font, 10))
-        style.configure("Section.TLabel", background=self.palette["panel"], foreground=self.palette["muted"], font=(base_font, 9, "bold"))
-        style.configure("Status.TLabel", background=self.palette["bg"], foreground=self.palette["muted"], font=(base_font, 9))
-
-        style.configure("Search.TEntry", fieldbackground=self.palette["field"], foreground=self.palette["text"], padding=(10, 8))
-        style.configure("Detail.TEntry", fieldbackground=self.palette["field"], foreground=self.palette["text"], padding=(10, 8))
-        style.map(
-            "Detail.TEntry",
-            fieldbackground=[("readonly", self.palette["field"])],
-            foreground=[("readonly", self.palette["text"])],
-        )
-
-        style.configure("TCombobox", fieldbackground=self.palette["field"], foreground=self.palette["text"], padding=6)
-        style.map(
-            "TCombobox",
-            fieldbackground=[("readonly", self.palette["field"])],
-            foreground=[("readonly", self.palette["text"])],
-        )
-        self.root.option_add("*TCombobox*Listbox*Background", self.palette["field"])
-        self.root.option_add("*TCombobox*Listbox*Foreground", self.palette["text"])
-        self.root.option_add("*TCombobox*Listbox*selectBackground", self.palette["accent"])
-        self.root.option_add("*TCombobox*Listbox*selectForeground", "#ffffff")
-
-        style.configure("TButton", background=self.palette["panel_alt"], foreground=self.palette["text"], padding=(12, 8))
-        style.map("TButton", background=[("active", self.palette["field"]), ("pressed", self.palette["field"])])
-        style.configure("Accent.TButton", background=self.palette["accent"], foreground="#ffffff", padding=(12, 8))
-        style.map(
-            "Accent.TButton",
-            background=[("active", self.palette["accent_hover"]), ("pressed", self.palette["accent_pressed"])],
-            foreground=[("disabled", self.palette["muted"])],
-        )
 
         style.configure(
-            "Treeview",
-            background=self.palette["panel_alt"],
-            fieldbackground=self.palette["panel_alt"],
-            foreground=self.palette["text"],
-            rowheight=30,
+            "Session.Treeview",
+            background=c["panel"],
+            fieldbackground=c["panel"],
+            foreground=c["text"],
+            rowheight=34,
             borderwidth=0,
+            font=(self.font_family, 11),
         )
-        style.map("Treeview", background=[("selected", self.palette["accent"])], foreground=[("selected", "#ffffff")])
+        style.map(
+            "Session.Treeview",
+            background=[("selected", c["selected"])],
+            foreground=[("selected", c["selected_fg"])],
+        )
         style.configure(
-            "Treeview.Heading",
-            background=self.palette["panel"],
-            foreground=self.palette["muted"],
-            font=(base_font, 9, "bold"),
+            "Session.Treeview.Heading",
+            background=c["heading_bg"],
+            foreground=c["muted"],
+            font=(self.font_family, 10, "bold"),
             padding=(10, 8),
             borderwidth=0,
+            relief="flat",
         )
         style.map(
-            "Treeview.Heading",
-            background=[("active", self.palette["panel_alt"])],
-            foreground=[("active", self.palette["text"])],
+            "Session.Treeview.Heading",
+            background=[("active", c["panel_alt"])],
+            foreground=[("active", c["text"])],
+        )
+        style.configure(
+            "Vertical.TScrollbar",
+            background=c["panel_alt"],
+            troughcolor=c["panel"],
+            borderwidth=0,
+            arrowsize=14,
+        )
+        style.configure(
+            "Horizontal.TScrollbar",
+            background=c["panel_alt"],
+            troughcolor=c["panel"],
+            borderwidth=0,
+            arrowsize=14,
         )
 
-        style.configure("Vertical.TScrollbar", background=self.palette["panel_alt"], troughcolor=self.palette["panel"])
-        style.configure("Horizontal.TScrollbar", background=self.palette["panel_alt"], troughcolor=self.palette["panel"])
-        style.configure("TSeparator", background=self.palette["border"])
+    # ------------------------------------------------------------------
+    #  Build the entire UI
+    # ------------------------------------------------------------------
 
     def build_ui(self):
-        top = ttk.Frame(self.root, style="App.TFrame", padding=(18, 18, 18, 10))
-        top.pack(fill=tk.X)
+        c = self.colors
+        ff = self.font_family
 
-        header = ttk.Frame(top, style="App.TFrame")
-        header.pack(fill=tk.X, pady=(0, 12))
-        title_block = ttk.Frame(header, style="App.TFrame")
-        title_block.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Label(title_block, text="Codex Sessions", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(
+        # ── Top bar ──────────────────────────────────────────────────
+        top = ctk.CTkFrame(self.root, fg_color="transparent")
+        top.pack(fill="x", padx=20, pady=(18, 0))
+
+        # Header row
+        header = ctk.CTkFrame(top, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 14))
+
+        title_block = ctk.CTkFrame(header, fg_color="transparent")
+        title_block.pack(side="left", fill="x", expand=True)
+
+        ctk.CTkLabel(
             title_block,
-            text="Browse, rename, and resume your local session history.",
-            style="Subtitle.TLabel",
-        ).pack(anchor=tk.W, pady=(2, 0))
-        ttk.Button(header, text="Refresh", command=self.load_and_render).pack(side=tk.RIGHT)
+            text="⚡ Codex Sessions",
+            font=(ff, 22, "bold"),
+        ).pack(anchor="w")
 
-        toolbar = ttk.Frame(top, style="App.TFrame")
-        toolbar.pack(fill=tk.X)
+        ctk.CTkLabel(
+            title_block,
+            text="Browse, rename, and resume your local session history",
+            font=(ff, 12),
+            text_color=c["muted"],
+        ).pack(anchor="w", pady=(2, 0))
 
-        search_frame = ttk.Frame(toolbar, style="Card.TFrame", padding=(14, 12))
-        search_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
-        ttk.Label(search_frame, text="Search", style="Section.TLabel").pack(anchor=tk.W, pady=(0, 8))
-        search_row = ttk.Frame(search_frame, style="Card.TFrame")
-        search_row.pack(fill=tk.X)
-        search_entry = ttk.Entry(search_row, textvariable=self.search_var, width=46, style="Search.TEntry")
-        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        search_entry.bind("<Return>", lambda _event: self.apply_filter())
-        ttk.Button(search_row, text="Clear", command=self.clear_filter).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(toolbar, text="Search", style="Accent.TButton", command=self.apply_filter).pack(side=tk.LEFT)
+        ctk.CTkButton(
+            header,
+            text="↻  Refresh",
+            command=self.load_and_render,
+            width=100,
+            height=34,
+            corner_radius=8,
+            font=(ff, 12, "bold"),
+            fg_color=c["panel_alt"],
+            hover_color=c["field"],
+            text_color=c["text"],
+        ).pack(side="right", pady=(4, 0))
 
-        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=18)
+        # ── Search bar ───────────────────────────────────────────────
+        search_card = ctk.CTkFrame(top, corner_radius=12, fg_color=c["panel"], border_width=1, border_color=c["border"])
+        search_card.pack(fill="x", pady=(0, 4))
 
-        self.center = ttk.Frame(self.root, style="App.TFrame")
-        self.center.pack(fill=tk.BOTH, expand=True, padx=18, pady=16)
+        search_inner = ctk.CTkFrame(search_card, fg_color="transparent")
+        search_inner.pack(fill="x", padx=14, pady=12)
 
-        self.left_frame = ttk.Frame(self.center, style="Card.TFrame", padding=(16, 14, 16, 14))
-        self.right_frame = ttk.Frame(self.center, style="Card.TFrame", padding=(16, 16, 16, 16))
+        ctk.CTkLabel(
+            search_inner,
+            text="🔍  Search",
+            font=(ff, 11, "bold"),
+            text_color=c["muted"],
+        ).pack(anchor="w", pady=(0, 8))
 
-        ttk.Label(self.left_frame, text="Sessions", style="Section.TLabel").pack(anchor=tk.W)
-        ttk.Label(self.left_frame, text="Double-click a row to resume it.", style="CardMuted.TLabel").pack(anchor=tk.W, pady=(2, 12))
+        search_row = ctk.CTkFrame(search_inner, fg_color="transparent")
+        search_row.pack(fill="x")
 
+        self.search_entry = ctk.CTkEntry(
+            search_row,
+            textvariable=self.search_var,
+            placeholder_text="Type to filter by title, CWD, session ID, or path…",
+            height=36,
+            corner_radius=8,
+            font=(ff, 12),
+        )
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.search_entry.bind("<Return>", lambda _e: self.apply_filter())
+
+        ctk.CTkButton(
+            search_row,
+            text="Clear",
+            command=self.clear_filter,
+            width=70,
+            height=36,
+            corner_radius=8,
+            font=(ff, 12),
+            fg_color=c["panel_alt"],
+            hover_color=c["field"],
+            text_color=c["text"],
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            search_row,
+            text="Search",
+            command=self.apply_filter,
+            width=80,
+            height=36,
+            corner_radius=8,
+            font=(ff, 12, "bold"),
+        ).pack(side="left")
+
+        # ── Separator ────────────────────────────────────────────────
+        sep = ctk.CTkFrame(self.root, height=1, fg_color=c["separator"])
+        sep.pack(fill="x", padx=20, pady=(8, 0))
+
+        # ── Center: table + detail panel ─────────────────────────────
+        self.center = ctk.CTkFrame(self.root, fg_color="transparent")
+        self.center.pack(fill="both", expand=True, padx=20, pady=(12, 8))
+
+        # Left: sessions table card
+        self.left_frame = ctk.CTkFrame(self.center, corner_radius=12, fg_color=c["panel"], border_width=1, border_color=c["border"])
+
+        # Right: detail panel card
+        self.right_frame = ctk.CTkFrame(self.center, corner_radius=12, fg_color=c["panel"], border_width=1, border_color=c["border"])
+
+        # -- LEFT PANEL contents --
+        left_inner = ctk.CTkFrame(self.left_frame, fg_color="transparent")
+        left_inner.pack(fill="both", expand=True, padx=16, pady=14)
+
+        ctk.CTkLabel(
+            left_inner,
+            text="Sessions",
+            font=(ff, 13, "bold"),
+            text_color=c["muted"],
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            left_inner,
+            text="Double-click a row to resume it",
+            font=(ff, 11),
+            text_color=c["muted"],
+        ).pack(anchor="w", pady=(2, 12))
+
+        # Treeview (ttk — no CTk equivalent, but heavily styled)
         columns = ("title", "created", "updated", "cwd", "id")
-        tree_frame = ttk.Frame(self.left_frame, style="Card.TFrame")
-        tree_frame.pack(fill=tk.BOTH, expand=True)
-        self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse")
+        tree_frame = tk.Frame(left_inner, bg=c["panel"], bd=0, highlightthickness=0)
+        tree_frame.pack(fill="both", expand=True)
+
+        self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse", style="Session.Treeview")
         self.update_sort_headings()
         self.tree.column("title", width=240, minwidth=160, stretch=True)
-        self.tree.column("created", width=120, minwidth=110, stretch=False)
-        self.tree.column("updated", width=120, minwidth=110, stretch=False)
+        self.tree.column("created", width=130, minwidth=110, stretch=False)
+        self.tree.column("updated", width=130, minwidth=110, stretch=False)
         self.tree.column("cwd", width=200, minwidth=140, stretch=True)
-        self.tree.column("id", width=120, anchor=tk.CENTER, stretch=False)
-        self.tree.tag_configure("even", background=self.palette["row_even"])
-        self.tree.tag_configure("odd", background=self.palette["row_odd"])
+        self.tree.column("id", width=100, anchor="center", stretch=False)
+        self.tree.tag_configure("even", background=c["row_even"])
+        self.tree.tag_configure("odd", background=c["row_odd"])
 
-        vscroll = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        hscroll = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
+        vscroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview, style="Vertical.TScrollbar")
+        hscroll = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview, style="Horizontal.TScrollbar")
         self.tree.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
         self.tree.grid(row=0, column=0, sticky="nsew")
         vscroll.grid(row=0, column=1, sticky="ns")
@@ -810,24 +944,51 @@ class SessionApp:
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
 
-        self.tree.bind("<<TreeviewSelect>>", lambda _event: self.update_details())
-        self.tree.bind("<Double-1>", lambda _event: self.resume_selected())
+        self.tree.bind("<<TreeviewSelect>>", lambda _e: self.update_details())
+        self.tree.bind("<Double-1>", lambda _e: self.resume_selected())
 
-        ttk.Label(self.right_frame, text="Session Details", style="Section.TLabel").pack(anchor=tk.W)
-        ttk.Label(self.right_frame, text="Edit labels and launch the selected session.", style="CardMuted.TLabel").pack(anchor=tk.W, pady=(2, 14))
+        # -- RIGHT PANEL contents --
+        right_inner = ctk.CTkFrame(self.right_frame, fg_color="transparent")
+        right_inner.pack(fill="both", expand=True, padx=16, pady=16)
 
-        ttk.Label(self.right_frame, text="Title", style="Card.TLabel").pack(anchor=tk.W, pady=(0, 4))
+        ctk.CTkLabel(
+            right_inner,
+            text="Session Details",
+            font=(ff, 13, "bold"),
+            text_color=c["muted"],
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            right_inner,
+            text="Edit labels and launch the selected session",
+            font=(ff, 11),
+            text_color=c["muted"],
+        ).pack(anchor="w", pady=(2, 14))
+
+        # Title field (editable)
+        ctk.CTkLabel(right_inner, text="Title", font=(ff, 11, "bold"), text_color=c["text"]).pack(anchor="w", pady=(0, 4))
         title_var = tk.StringVar(value="-")
-        title_entry = ttk.Entry(self.right_frame, textvariable=title_var, style="Detail.TEntry")
-        title_entry.pack(fill=tk.X, pady=(0, 8))
-        title_entry.bind("<Return>", lambda _event: self.save_title_override())
+        self.title_entry = ctk.CTkEntry(right_inner, textvariable=title_var, height=34, corner_radius=8, font=(ff, 12))
+        self.title_entry.pack(fill="x", pady=(0, 8))
+        self.title_entry.bind("<Return>", lambda _e: self.save_title_override())
         self.detail_vars["title"] = title_var
 
-        title_buttons = ttk.Frame(self.right_frame, style="Card.TFrame")
-        title_buttons.pack(fill=tk.X, pady=(0, 14))
-        ttk.Button(title_buttons, text="Save Title", command=self.save_title_override).pack(side=tk.LEFT)
-        ttk.Button(title_buttons, text="Reset Title", command=self.reset_title_override).pack(side=tk.LEFT, padx=6)
+        title_buttons = ctk.CTkFrame(right_inner, fg_color="transparent")
+        title_buttons.pack(fill="x", pady=(0, 14))
 
+        ctk.CTkButton(
+            title_buttons, text="💾  Save Title", command=self.save_title_override,
+            height=32, corner_radius=8, font=(ff, 12),
+            fg_color=c["accent"], hover_color=c["accent_hover"],
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            title_buttons, text="↺  Reset Title", command=self.reset_title_override,
+            height=32, corner_radius=8, font=(ff, 12),
+            fg_color=c["panel_alt"], hover_color=c["field"], text_color=c["text"],
+        ).pack(side="left", padx=(8, 0))
+
+        # Read-only detail fields
         detail_fields = [
             ("Session ID", "session_id"),
             ("Created", "created"),
@@ -836,31 +997,92 @@ class SessionApp:
             ("Log File", "path"),
         ]
         for label, key in detail_fields:
-            ttk.Label(self.right_frame, text=label, style="Card.TLabel").pack(anchor=tk.W, pady=(0, 4))
+            ctk.CTkLabel(right_inner, text=label, font=(ff, 11, "bold"), text_color=c["text"]).pack(anchor="w", pady=(0, 4))
             var = tk.StringVar(value="-")
-            entry = ttk.Entry(self.right_frame, textvariable=var, state="readonly", style="Detail.TEntry")
-            entry.pack(fill=tk.X, pady=(0, 10))
+            entry = ctk.CTkEntry(right_inner, textvariable=var, height=32, corner_radius=8, font=(ff, 11), state="disabled")
+            entry.pack(fill="x", pady=(0, 10))
             self.detail_vars[key] = var
 
-        ttk.Label(self.right_frame, text="CLI", style="Card.TLabel").pack(anchor=tk.W, pady=(6, 4))
-        self.cli_combo = ttk.Combobox(self.right_frame, textvariable=self.cli_var, state="readonly")
-        self.cli_combo.pack(fill=tk.X, pady=(0, 8))
-        self.cli_combo.bind("<<ComboboxSelected>>", lambda _event: self.on_cli_selected())
-        cli_buttons = ttk.Frame(self.right_frame, style="Card.TFrame")
-        cli_buttons.pack(fill=tk.X, pady=(0, 14))
-        ttk.Button(cli_buttons, text="Clear Default", command=self.clear_default_cli).pack(side=tk.LEFT)
+        # CLI selector
+        sep2 = ctk.CTkFrame(right_inner, height=1, fg_color=c["separator"])
+        sep2.pack(fill="x", pady=(4, 12))
 
-        buttons = ttk.Frame(self.right_frame, style="Card.TFrame")
-        buttons.pack(fill=tk.X, pady=(10, 0))
-        ttk.Button(buttons, text="Resume", style="Accent.TButton", command=self.resume_selected).pack(fill=tk.X)
-        ttk.Button(buttons, text="Copy Session ID", command=self.copy_session_id).pack(fill=tk.X, pady=6)
-        ttk.Button(buttons, text="Open CWD", command=self.open_cwd).pack(fill=tk.X)
-        ttk.Button(buttons, text="Open CWD in Terminal", command=self.open_cwd_terminal).pack(fill=tk.X, pady=6)
-        ttk.Button(buttons, text="Open Log", command=self.open_log).pack(fill=tk.X)
+        ctk.CTkLabel(right_inner, text="CLI Shell", font=(ff, 11, "bold"), text_color=c["text"]).pack(anchor="w", pady=(0, 4))
+        self.cli_combo = ctk.CTkComboBox(
+            right_inner,
+            variable=self.cli_var,
+            values=[],
+            height=34,
+            corner_radius=8,
+            font=(ff, 12),
+            state="readonly",
+            command=lambda _v: self.on_cli_selected(),
+        )
+        self.cli_combo.pack(fill="x", pady=(0, 8))
 
-        status = ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=(18, 8), style="Status.TLabel")
-        status.pack(side=tk.BOTTOM, fill=tk.X)
+        ctk.CTkButton(
+            right_inner, text="Clear Default", command=self.clear_default_cli,
+            height=28, corner_radius=6, font=(ff, 11),
+            fg_color=c["panel_alt"], hover_color=c["field"], text_color=c["muted"],
+        ).pack(anchor="w", pady=(0, 14))
+
+        # Action buttons
+        sep3 = ctk.CTkFrame(right_inner, height=1, fg_color=c["separator"])
+        sep3.pack(fill="x", pady=(0, 12))
+
+        ctk.CTkButton(
+            right_inner, text="▶  Resume Session", command=self.resume_selected,
+            height=38, corner_radius=8, font=(ff, 13, "bold"),
+        ).pack(fill="x", pady=(0, 6))
+
+        action_row1 = ctk.CTkFrame(right_inner, fg_color="transparent")
+        action_row1.pack(fill="x", pady=(0, 6))
+
+        ctk.CTkButton(
+            action_row1, text="📋 Copy ID", command=self.copy_session_id,
+            height=32, corner_radius=8, font=(ff, 11),
+            fg_color=c["panel_alt"], hover_color=c["field"], text_color=c["text"],
+        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+        ctk.CTkButton(
+            action_row1, text="📂 Open CWD", command=self.open_cwd,
+            height=32, corner_radius=8, font=(ff, 11),
+            fg_color=c["panel_alt"], hover_color=c["field"], text_color=c["text"],
+        ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+        action_row2 = ctk.CTkFrame(right_inner, fg_color="transparent")
+        action_row2.pack(fill="x")
+
+        ctk.CTkButton(
+            action_row2, text="🖥  CWD in Terminal", command=self.open_cwd_terminal,
+            height=32, corner_radius=8, font=(ff, 11),
+            fg_color=c["panel_alt"], hover_color=c["field"], text_color=c["text"],
+        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+        ctk.CTkButton(
+            action_row2, text="📄 Open Log", command=self.open_log,
+            height=32, corner_radius=8, font=(ff, 11),
+            fg_color=c["panel_alt"], hover_color=c["field"], text_color=c["text"],
+        ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+        # ── Status bar ───────────────────────────────────────────────
+        status_bar = ctk.CTkFrame(self.root, height=32, corner_radius=0, fg_color=c["heading_bg"])
+        status_bar.pack(side="bottom", fill="x")
+
+        self.status_label = ctk.CTkLabel(
+            status_bar,
+            textvariable=self.status_var,
+            font=(ff, 11),
+            text_color=c["muted"],
+            anchor="w",
+        )
+        self.status_label.pack(side="left", padx=20, pady=6)
+
         self.apply_layout("horizontal")
+
+    # ------------------------------------------------------------------
+    #  Data loading
+    # ------------------------------------------------------------------
 
     def load_and_render(self):
         if not self.sessions_dir.exists():
@@ -883,7 +1105,7 @@ class SessionApp:
         display, mapping = build_cli_display_options(self.cli_options, default_opt)
         self.cli_display_map = mapping
         if self.cli_combo is not None:
-            self.cli_combo["values"] = display
+            self.cli_combo.configure(values=display)
         if default_opt:
             for label, opt in mapping.items():
                 if opt == default_opt:
@@ -892,6 +1114,10 @@ class SessionApp:
         else:
             if self.cli_var.get() and self.cli_var.get() not in display:
                 self.cli_var.set("")
+
+    # ------------------------------------------------------------------
+    #  Filter / sort
+    # ------------------------------------------------------------------
 
     def clear_filter(self):
         self.search_var.set("")
@@ -907,7 +1133,7 @@ class SessionApp:
             tag = "odd" if shown % 2 else "even"
             self.tree.insert(
                 "",
-                tk.END,
+                "end",
                 iid=session.session_id,
                 values=(
                     session.title,
@@ -925,9 +1151,13 @@ class SessionApp:
         self.update_details()
         total = len(self.sessions)
         if query:
-            self.status_var.set(f"Showing {shown} of {total} sessions for filter: {query}")
+            self.status_var.set(f"  Showing {shown} of {total} sessions  ·  filter: {query}")
         else:
-            self.status_var.set(f"Showing {shown} sessions")
+            self.status_var.set(f"  {shown} sessions loaded")
+
+    # ------------------------------------------------------------------
+    #  Responsive layout
+    # ------------------------------------------------------------------
 
     def on_resize(self, _event):
         width = self.root.winfo_width()
@@ -955,6 +1185,10 @@ class SessionApp:
             self.left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
             self.right_frame.grid(row=0, column=1, sticky="nsew")
 
+    # ------------------------------------------------------------------
+    #  Sorting
+    # ------------------------------------------------------------------
+
     def get_sorted_sessions(self):
         key_map = {
             "title": lambda s: s.title.lower(),
@@ -979,11 +1213,15 @@ class SessionApp:
         for column, label in self.column_labels.items():
             text = label
             if column == self.sort_column:
-                text += " v" if self.sort_desc else " ^"
+                text += "  ▾" if self.sort_desc else "  ▴"
             if column in self.sortable_columns:
                 self.tree.heading(column, text=text, command=lambda c=column: self.sort_by(c))
             else:
                 self.tree.heading(column, text=text)
+
+    # ------------------------------------------------------------------
+    #  Detail panel
+    # ------------------------------------------------------------------
 
     def get_selected_session(self):
         selection = self.tree.selection()
@@ -1003,6 +1241,10 @@ class SessionApp:
         self.detail_vars["updated"].set(session.updated_display)
         self.detail_vars["cwd"].set(session.cwd or "-")
         self.detail_vars["path"].set(str(session.path))
+
+    # ------------------------------------------------------------------
+    #  Title overrides
+    # ------------------------------------------------------------------
 
     def save_title_override(self):
         session = self.get_selected_session()
@@ -1036,6 +1278,10 @@ class SessionApp:
         session.search_blob = f"{session.title} {session.cwd} {session.session_id} {session.path}".lower()
         self.detail_vars["title"].set(session.title)
         self.apply_filter(select_id=session.session_id)
+
+    # ------------------------------------------------------------------
+    #  Resume / terminal actions
+    # ------------------------------------------------------------------
 
     def resume_selected(self):
         session = self.get_selected_session()
@@ -1134,6 +1380,10 @@ class SessionApp:
             messagebox.showerror("Open Log", f"Could not open the session log file.\n\n{exc}")
 
 
+# ---------------------------------------------------------------------------
+#  CLI entry point
+# ---------------------------------------------------------------------------
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Codex session browser")
     parser.add_argument("--sessions-dir", default="")
@@ -1165,7 +1415,12 @@ def main():
     save_app_config(app_config_path(), sessions_dir)
     titles_path = args.titles_file or str(default_titles_path(sessions_dir))
     settings_path = args.settings_file or str(default_settings_path(sessions_dir))
-    root = tk.Tk()
+
+    # Set system-adaptive theme BEFORE creating the window
+    ctk.set_appearance_mode("system")
+    ctk.set_default_color_theme("blue")
+
+    root = ctk.CTk()
     app = SessionApp(root, str(sessions_dir), titles_path, settings_path)
     root.mainloop()
 
