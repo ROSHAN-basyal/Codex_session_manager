@@ -725,6 +725,8 @@ class SessionApp:
         self.center = None
         self.left_frame = None
         self.right_frame = None
+        self.right_scroll_frame = None
+        self.session_resume_glyph = "▶"
 
         self.font_family = _pick_font()
         self.colors = _get_theme_colors()
@@ -776,20 +778,6 @@ class SessionApp:
             "Session.Treeview.Heading",
             background=[("active", c["panel_alt"])],
             foreground=[("active", c["text"])],
-        )
-        style.configure(
-            "Vertical.TScrollbar",
-            background=c["panel_alt"],
-            troughcolor=c["panel"],
-            borderwidth=0,
-            arrowsize=14,
-        )
-        style.configure(
-            "Horizontal.TScrollbar",
-            background=c["panel_alt"],
-            troughcolor=c["panel"],
-            borderwidth=0,
-            arrowsize=14,
         )
 
     # ------------------------------------------------------------------
@@ -921,13 +909,13 @@ class SessionApp:
         ).pack(anchor="w", pady=(2, 12))
 
         # Treeview (ttk — no CTk equivalent, but heavily styled)
-        columns = ("title", "created", "updated", "cwd", "id")
+        columns = ("created", "updated", "cwd", "id")
         tree_frame = tk.Frame(left_inner, bg=c["panel"], bd=0, highlightthickness=0)
         tree_frame.pack(fill="both", expand=True)
 
-        self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse", style="Session.Treeview")
+        self.tree = ttk.Treeview(tree_frame, columns=columns, show="tree headings", selectmode="browse", style="Session.Treeview")
         self.update_sort_headings()
-        self.tree.column("title", width=240, minwidth=160, stretch=True)
+        self.tree.column("#0", width=260, minwidth=180, stretch=True)
         self.tree.column("created", width=130, minwidth=110, stretch=False)
         self.tree.column("updated", width=130, minwidth=110, stretch=False)
         self.tree.column("cwd", width=200, minwidth=140, stretch=True)
@@ -935,8 +923,13 @@ class SessionApp:
         self.tree.tag_configure("even", background=c["row_even"])
         self.tree.tag_configure("odd", background=c["row_odd"])
 
-        vscroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview, style="Vertical.TScrollbar")
-        hscroll = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview, style="Horizontal.TScrollbar")
+        tree_scrollbar_kwargs = {
+            "fg_color": "transparent",
+            "button_color": c["panel_alt"],
+            "button_hover_color": c["field"],
+        }
+        vscroll = ctk.CTkScrollbar(tree_frame, orientation="vertical", command=self.tree.yview, **tree_scrollbar_kwargs)
+        hscroll = ctk.CTkScrollbar(tree_frame, orientation="horizontal", command=self.tree.xview, **tree_scrollbar_kwargs)
         self.tree.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
         self.tree.grid(row=0, column=0, sticky="nsew")
         vscroll.grid(row=0, column=1, sticky="ns")
@@ -946,10 +939,21 @@ class SessionApp:
 
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self.update_details())
         self.tree.bind("<Double-1>", lambda _e: self.resume_selected())
+        self.tree.bind("<ButtonRelease-1>", self.on_tree_click_resume, add="+")
 
         # -- RIGHT PANEL contents --
-        right_inner = ctk.CTkFrame(self.right_frame, fg_color="transparent")
-        right_inner.pack(fill="both", expand=True, padx=16, pady=16)
+        self.right_scroll_frame = ctk.CTkScrollableFrame(
+            self.right_frame,
+            fg_color="transparent",
+            corner_radius=0,
+            scrollbar_fg_color="transparent",
+            scrollbar_button_color=c["panel_alt"],
+            scrollbar_button_hover_color=c["field"],
+        )
+        self.right_scroll_frame.pack(fill="both", expand=True, padx=8, pady=8)
+
+        right_inner = ctk.CTkFrame(self.right_scroll_frame, fg_color="transparent")
+        right_inner.pack(fill="both", expand=True, padx=8, pady=8)
 
         ctk.CTkLabel(
             right_inner,
@@ -1065,6 +1069,8 @@ class SessionApp:
             fg_color=c["panel_alt"], hover_color=c["field"], text_color=c["text"],
         ).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
+        self._bind_detail_scroll_events(right_inner)
+
         # ── Status bar ───────────────────────────────────────────────
         status_bar = ctk.CTkFrame(self.root, height=32, corner_radius=0, fg_color=c["heading_bg"])
         status_bar.pack(side="bottom", fill="x")
@@ -1135,8 +1141,8 @@ class SessionApp:
                 "",
                 "end",
                 iid=session.session_id,
+                text=f"{self.session_resume_glyph}  {session.title}",
                 values=(
-                    session.title,
                     session.created_display,
                     session.updated_display,
                     session.cwd or "-",
@@ -1185,6 +1191,33 @@ class SessionApp:
             self.left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
             self.right_frame.grid(row=0, column=1, sticky="nsew")
 
+    def _bind_detail_scroll_events(self, widget):
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self._on_detail_mousewheel, add="+")
+        for child in widget.winfo_children():
+            self._bind_detail_scroll_events(child)
+
+    def _on_detail_mousewheel(self, event):
+        if self.right_scroll_frame is None:
+            return None
+        canvas = getattr(self.right_scroll_frame, "_parent_canvas", None)
+        if canvas is None:
+            return None
+
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:
+            raw_delta = getattr(event, "delta", 0)
+            if raw_delta == 0:
+                return None
+            steps = int(-raw_delta / 120)
+            delta = steps if steps else (-1 if raw_delta > 0 else 1)
+
+        canvas.yview_scroll(delta, "units")
+        return "break"
+
     # ------------------------------------------------------------------
     #  Sorting
     # ------------------------------------------------------------------
@@ -1214,10 +1247,27 @@ class SessionApp:
             text = label
             if column == self.sort_column:
                 text += "  ▾" if self.sort_desc else "  ▴"
+            column_id = "#0" if column == "title" else column
             if column in self.sortable_columns:
-                self.tree.heading(column, text=text, command=lambda c=column: self.sort_by(c))
+                self.tree.heading(column_id, text=text, command=lambda c=column: self.sort_by(c))
             else:
-                self.tree.heading(column, text=text)
+                self.tree.heading(column_id, text=text)
+
+    def on_tree_click_resume(self, event):
+        item_id = self.tree.identify_row(event.y)
+        if not item_id or self.tree.identify_column(event.x) != "#0":
+            return None
+
+        bbox = self.tree.bbox(item_id, "#0")
+        if not bbox:
+            return None
+
+        if event.x <= bbox[0] + 24:
+            self.tree.selection_set(item_id)
+            self.tree.focus(item_id)
+            self.resume_selected()
+            return "break"
+        return None
 
     # ------------------------------------------------------------------
     #  Detail panel

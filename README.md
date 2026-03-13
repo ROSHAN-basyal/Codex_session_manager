@@ -1,16 +1,43 @@
 # Codex Session Browser
 
-This is a modern GUI for browsing local Codex sessions, editing titles, opening session folders/logs, and resuming a session in a shell. The interface is built with **CustomTkinter** and features a sleek, system-adaptive dark/light theme.
+This repository is now split into:
 
-The project started as a Windows-only utility. The source now also supports Linux desktop environments, including Arch/EndeavourOS, as long as Tk and a terminal emulator are installed.
+- root `/`: shared application code and shared build requirements
+- `/Linux`: Linux-only scripts, packaging assets, and Linux distributables
+- `/Windows`: Windows-only scripts and Windows distributables
+
+The shared desktop app entrypoint remains [codex_session_manager.py](/home/rsnb/Documents/My_projects/Codex_session_manager/codex_session_manager.py).
+
+## Repository Layout
+
+Shared files in `/`:
+
+- `codex_session_manager.py`
+- `guide_for_linux.md`
+- `guide_for_windows.md`
+- `README.md`
+- `requirements-build.txt`
+
+Linux-only files in `/Linux`:
+
+- `Linux/scripts/`
+- `Linux/packaging/linux/`
+- `Linux/dist/`
+
+Windows-only files in `/Windows`:
+
+- `Windows/scripts/`
+- `Windows/dist/`
 
 ## Run From Source
+
+Shared source run:
 
 ```bash
 python codex_session_manager.py
 ```
 
-Optional override for a specific sessions directory:
+Optional sessions override:
 
 ```bash
 python codex_session_manager.py --sessions-dir "$HOME/.codex/sessions"
@@ -23,45 +50,45 @@ Startup order:
 3. default `~/.codex/sessions`, if it exists
 4. GUI folder picker
 
-## Linux VM Setup
+## Linux
 
-Inside your Linux VM:
+Linux-specific setup and build files live under [`Linux/`](/home/rsnb/Documents/My_projects/Codex_session_manager/Linux).
+
+Setup in a Linux VM:
 
 ```bash
 python -m venv .venv
-./scripts/setup_linux_venv.sh
-./scripts/run_linux_gui.sh
+./Linux/scripts/setup_linux_venv.sh
+./Linux/scripts/run_linux_gui.sh
 ```
 
-The setup script validates:
+Build Linux binary:
 
-- the project-local virtual environment
-- CustomTkinter installation (auto-installed via pip)
-- Tk availability in that venv
-- `xdg-open`
-- a supported terminal emulator
-- whether `codex` is on `PATH`
+```bash
+.venv/bin/pip install -r requirements-build.txt
+./Linux/scripts/build_linux_binary.sh
+```
 
-If Tk is missing, the script stops with the exact `pacman` packages you need to install in the VM.
+Build Linux AppImage:
 
-## Linux Requirements
+```bash
+./Linux/scripts/build_linux_appimage.sh
+```
 
-This app needs:
+Linux outputs:
 
-- Python 3
-- Tk support for Python
-- CustomTkinter (auto-installed by the setup script via `pip install customtkinter`)
-- a graphical desktop session (`DISPLAY` or `WAYLAND_DISPLAY`)
-- a terminal emulator for Resume / Open CWD in Terminal
-- `xdg-open` from `xdg-utils` for opening logs and folders
+- `Linux/dist/codex-session-manager`
+- `Linux/dist/Codex-Session-Manager.AppImage`
 
-For Arch / EndeavourOS, install the system packages in your Linux VM:
+The `Linux/dist/` directory is intended to be committed and pushed so users can download prebuilt Linux artifacts directly from GitHub.
+
+For Arch / EndeavourOS in the Linux VM:
 
 ```bash
 sudo pacman -S python tk xdg-utils
 ```
 
-Recommended terminal emulators on Linux:
+Recommended Linux terminal emulators:
 
 - `gnome-terminal`
 - `konsole`
@@ -71,29 +98,35 @@ Recommended terminal emulators on Linux:
 - `alacritty`
 - `xterm`
 
-The app does not install Tk through `pip`; Tk is an OS package. CustomTkinter is installed via pip in the virtual environment.
+## Windows
 
-## Windows Run
+Windows-specific setup and build files live under [`Windows/`](/home/rsnb/Documents/My_projects/Codex_session_manager/Windows).
 
-The existing Windows build artifact is still included:
-
-```text
-dist_v3/session_manager_V3.exe
-```
-
-## Build
-
-Windows example:
+Setup a Windows venv:
 
 ```powershell
-python -m PyInstaller --onefile --noconsole --name session_manager_V3 codex_session_manager.py
+.\Windows\scripts\setup_windows_venv.ps1
 ```
 
-Linux example:
+Run from source on Windows:
 
-```bash
-python -m PyInstaller --onefile --windowed --name session_manager_linux codex_session_manager.py
+```powershell
+.\Windows\scripts\run_windows_gui.ps1
 ```
+
+Build the Windows executable:
+
+```powershell
+.\Windows\scripts\build_windows_exe.ps1
+```
+
+Windows output:
+
+- `Windows/dist/codex-session-manager.exe`
+
+The `Windows/dist/` directory is intended to be committed and pushed so users can download prebuilt Windows artifacts directly from GitHub.
+
+The Windows build script is configured to generate `Windows/dist/codex-session-manager.exe` when run on a Windows machine. Until that new build is generated on Windows, the directory may still contain the older prebuilt executable.
 
 ## What The App Stores
 
@@ -114,10 +147,7 @@ The `session mananger` directory name is kept as-is for compatibility with the e
 - Open the raw rollout log
 - Save and reset custom titles
 
-## GUI Layout
+Detailed guides:
 
-- top bar: search, clear, search button, refresh button
-- center: session table
-- right panel: title editor, metadata, shell selector, actions
-
-See `GUIDE.md` for the day-to-day usage flow.
+- [guide_for_linux.md](/home/rsnb/Documents/My_projects/Codex_session_manager/guide_for_linux.md)
+- [guide_for_windows.md](/home/rsnb/Documents/My_projects/Codex_session_manager/guide_for_windows.md)

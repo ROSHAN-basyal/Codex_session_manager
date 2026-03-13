@@ -1,9 +1,5 @@
 build/
 build_v3/
-dist/*
-!dist/*.exe
-dist_v3/*
-!dist_v3/*.exe
 *.spec
 __pycache__/
 .venv/

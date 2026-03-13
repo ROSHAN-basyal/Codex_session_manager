@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Codex Session Manager
+Comment=Browse and resume local Codex sessions
+Exec=codex-session-manager
+Icon=codex-session-manager
+Categories=Utility;Development;
+Terminal=false

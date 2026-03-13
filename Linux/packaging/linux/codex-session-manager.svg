@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Codex Session Manager icon">
+  <rect width="128" height="128" rx="28" fill="#0f141b"/>
+  <rect x="18" y="18" width="92" height="92" rx="18" fill="#171d26" stroke="#2a3646" stroke-width="4"/>
+  <rect x="32" y="34" width="64" height="12" rx="6" fill="#3c82f6"/>
+  <rect x="32" y="58" width="52" height="8" rx="4" fill="#92a1b3"/>
+  <rect x="32" y="74" width="42" height="8" rx="4" fill="#92a1b3"/>
+  <circle cx="90" cy="82" r="12" fill="#3c82f6"/>
+  <path d="M90 74v8h8" fill="none" stroke="#eef3f8" stroke-linecap="round" stroke-linejoin="round" stroke-width="4"/>
+</svg>
